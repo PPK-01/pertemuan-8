@@ -1,4 +1,4 @@
-// ===== Tipe Domain Rawuh - Sprint 2 =====
+// ===== Tipe Domain Rawuh - Sprint 2 & Sprint 3 =====
 
 export type Role = 'praktikan' | 'asisten';
 export type Kelas = string;
@@ -47,12 +47,30 @@ export type KelasPraktikum = {
   updatedAt?: string;
 };
 
+export type LabId = string;
+
+export type Lab = {
+  id: LabId;
+  nama: string;
+  gedung?: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+};
+
 export type Session = {
   id: string;
   praktikum: Praktikum;
   kelas: Kelas;
   topik: string;
+  /** Ruang sesi (v2.2); pada sesi baru diisi nama lab atau string kosong, digantikan labId (v3). */
   ruang: string;
+  /** Rujukan lab praktikum (Sprint 3). */
+  labId?: LabId;
   /** ISO 8601 (UTC). */
   startAt: string;
   /** ISO 8601 (UTC). */
@@ -66,6 +84,14 @@ export type Session = {
   updatedAt?: string;
 };
 
+export type LokasiPresensi = {
+  lat: number;
+  lng: number;
+  akurasiM: number;
+  jarakM: number;
+  mocked: boolean;
+};
+
 export type Attendance = {
   id: string; // ${sessionId}_${userId}
   sessionId: string;
@@ -73,7 +99,41 @@ export type Attendance = {
   kelas?: string;
   code?: string;
   timestamp: string; // ISO 8601 (UTC)
+  labId?: LabId;
+  lokasi?: LokasiPresensi;
 };
+
+export type DevicePosition = {
+  lat: number;
+  lng: number;
+  akurasiM: number;
+  mocked: boolean;
+  at: string;
+};
+
+export type LocationStatus =
+  | 'idle'
+  | 'checking'
+  | 'ready'
+  | 'permission_denied'
+  | 'permission_blocked'
+  | 'services_off'
+  | 'low_accuracy'
+  | 'mocked'
+  | 'timeout'
+  | 'unavailable';
+
+export type NotificationPermission =
+  | 'granted'
+  | 'denied'
+  | 'undetermined'
+  | 'unsupported';
+
+export type NotifPayload =
+  | { type: 'session_opened'; sessionId: string }
+  | { type: 'session_created'; sessionId: string }
+  | { type: 'izin_decided'; izinId: string }
+  | { type: 'location_changed'; sessionId: string };
 
 // ===== Analisis AI & Review Izin =====
 
@@ -117,12 +177,18 @@ export type Izin = {
   updatedAt: string;
 };
 
-// ===== Rekap (FR-10, FR-28) =====
+// ===== Rekap (FR-10, FR-28, FR-39) =====
+
+export type RekapItemHadir = {
+  user: User;
+  timestamp: string;
+  lokasi?: LokasiPresensi;
+};
 
 export type Rekap = {
   total: number;
   /** Urut timestamp kehadiran paling awal di atas. */
-  hadir: { user: User; timestamp: string }[];
+  hadir: RekapItemHadir[];
   /** Hanya izin berstatus approved, diurutkan menurut nama user. */
   izin: { user: User; izin: Izin }[];
   /** Diurutkan menurut nama; tidak memuat yang hadir atau izin disetujui. */
@@ -140,7 +206,7 @@ export type ErrorCode =
   | 'CONFLICT'
   /** Data dengan kunci unik yang sama sudah ada (mis. pasangan praktikum dan kelas). */
   | 'DUPLICATE'
-  /** Data masih dirujuk data lain sehingga belum boleh diubah atau dihapus (FR-20). */
+  /** Data masih dirujuk data lain sehingga belum boleh diubah atau dihapus (FR-20, FR-43). */
   | 'IN_USE'
   | 'UNKNOWN';
 
@@ -156,7 +222,14 @@ export type AttendFailReason =
   | 'IZIN_APPROVED'
   | 'NO_CONNECTION'
   | 'TIMEOUT'
-  | 'UNKNOWN';
+  | 'UNKNOWN'
+  | 'NO_LAB'
+  | 'OUTSIDE_RADIUS'
+  | 'LOW_ACCURACY'
+  | 'MOCKED_LOCATION'
+  | 'LOCATION_PERMISSION'
+  | 'LOCATION_SERVICES_OFF'
+  | 'LOCATION_TIMEOUT';
 
 export type AttendResult =
   | { ok: true; attendance: Attendance }
@@ -164,11 +237,22 @@ export type AttendResult =
 
 // ===== Input Forms =====
 
+export type CreateLabInput = {
+  nama: string;
+  gedung?: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+};
+
+export type UpdateLabInput = Partial<CreateLabInput>;
+
 export type CreateSessionInput = {
   praktikum: string;
   kelas: string;
   topik: string;
-  ruang: string;
+  ruang?: string;
+  labId?: LabId;
   startAt: string;
   endAt: string;
   createdBy: string;
