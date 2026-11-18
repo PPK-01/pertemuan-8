@@ -1,6 +1,6 @@
 # SRS & Rencana Kerja Sprint 3: Aplikasi Presensi Praktikum "Rawuh" (Lokasi, Peta, dan Notifikasi)
 
-PM: Elang · Tim: Dhimas, Ibrahim · Sprint: 3 · Versi 3.0 (lanjutan SRS v2.2) · Repo: `PPK-01/pertemuan-8`
+PM: Elang · Tim: Dhimas, Ibrahim · Sprint: 3 · Versi 3.1 (lanjutan SRS v2.2) · Repo: `PPK-01/pertemuan-8` · Batas pengerjaan: Senin
 
 > **Versi sebelumnya:** SRS v1.3 (Sprint 1) di `docs/arsip/SRS-v1.3-sprint-1.md`, SRS v2.2 (Sprint 2) di `docs/arsip/SRS-v2.2-sprint-2.md`. Komentar kode dan `DESIGN.md` yang ditulis sebelum Sprint 3 dengan rujukan "SRS §x" atau "SRS v2.2 §x" mengacu ke **v2.2**. Rujukan baru sejak Sprint 3 ditulis "SRS v3 §x".
 
@@ -8,7 +8,7 @@ PM: Elang · Tim: Dhimas, Ibrahim · Sprint: 3 · Versi 3.0 (lanjutan SRS v2.2) 
 
 ### 1.1 Tujuan
 
-Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SRS v2.2 (Sprint 2). Pada Sprint 2 aplikasi sudah memiliki akun Firebase, data Firestore yang tersinkron realtime, presensi berkode, izin, dan pemeriksaan izin berbantuan AI. Sprint 3 menambahkan tiga kemampuan perangkat, yaitu **lokasi**, **peta**, dan **push notification**, agar presensi hanya berhasil di sekitar lab, pengguna dapat melihat sebaran dan aktivitas lab Informatika, dan pengguna terkait menerima pemberitahuan saat ada peristiwa penting. Dokumen ini juga membagi file dan tugas Dhimas dan Ibrahim agar dapat bekerja paralel tanpa merge conflict.
+Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SRS v2.2 (Sprint 2). Pada Sprint 2 aplikasi sudah memiliki akun Firebase, data Firestore yang tersinkron realtime, presensi berkode, izin, dan pemeriksaan izin berbantuan AI. Sprint 3 menambahkan tiga kemampuan perangkat, yaitu **lokasi**, **peta**, dan **push notification**, agar presensi hanya berhasil di sekitar lab, pengguna dapat melihat sebaran dan aktivitas lab Informatika, dan pengguna terkait menerima pemberitahuan saat ada peristiwa penting. Dokumen ini juga membagi file dan tugas Dhimas dan Ibrahim serta menetapkan urutan tahap pengerjaan agar tidak terjadi merge conflict.
 
 ### 1.2 Ruang Lingkup
 
@@ -45,10 +45,10 @@ Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SR
 | Lokasi | **`expo-location`**, hanya **foreground** | Cukup untuk presensi, peta, dan form lab; privasi terjaga |
 | Marker pengguna | Posisi **perangkat sendiri**, diperbarui realtime di perangkat (`watchPositionAsync`) selama layar peta terbuka, tidak dikirim ke server | Privasi, kuota tulis Firestore, dan baterai |
 | Validasi radius | Jarak dihitung di klien (rumus haversine); bukti lokasi disimpan di dokumen presensi; rules memeriksa konsistensi bukti dengan radius lab | Rules Firestore tidak dapat membaca GPS (risiko sisa di 6.4) |
-| Identitas aplikasi | `package` Android baru (usulan `com.ppk01.rawuh`), `userInterfaceStyle: "light"`, pembaruan patch Expo, dalam **satu rebuild** di Fase 0 | FCM dan API key Maps terikat ke `package` dan SHA-1; satu rebuild untuk semua perubahan native |
+| Identitas aplikasi | `package` Android baru (usulan `com.ppk01.rawuh`), `userInterfaceStyle: "light"`, pembaruan patch Expo, dalam **satu rebuild** di Tahap 1 | FCM dan API key Maps terikat ke `package` dan SHA-1; satu rebuild untuk semua perubahan native |
 | Web | Tetap didukung untuk uji tampilan; **peta diganti daftar lab** di web karena `react-native-maps` tidak mendukung web; lokasi di web memakai geolocation browser; notifikasi tidak aktif di web | NFR-06 dipertahankan sejauh mungkin |
 
-Dependency baru dipasang sekali di Fase 0 oleh Dhimas: `expo-location`, `react-native-maps`, `expo-notifications`, `expo-device` (bila dibutuhkan `expo-notifications`), lewat `npx expo install`. `functions/package.json` milik Dhimas dan terpisah dari `package.json` aplikasi.
+Dependency baru dipasang sekali di Tahap 1 (D-01) oleh Dhimas: `expo-location`, `react-native-maps`, `expo-notifications`, `expo-device` (bila dibutuhkan `expo-notifications`), lewat `npx expo install`. `functions/package.json` milik Dhimas dan terpisah dari `package.json` aplikasi.
 
 ### 1.5 Asumsi dan Hal yang Masih Terbuka
 
@@ -444,7 +444,7 @@ NFR-01 s.d. NFR-12 dari v2.2 tetap berlaku, dengan catatan NFR-06 (web) mengikut
   izin/**, kelas/**     Tetap                                                                [Ibrahim]
 ```
 
-- **Tab praktikan** saat ini Jadwal · Izin · Riwayat · Profil. Sprint 3 menjadikannya Jadwal · Peta · Izin · Riwayat, dengan **tombol aksi bulat** di tengah `PraktikanTabBar` membuka halaman presensi (diberi penanda bila ada sesi Dibuka yang belum dipresensi). **Profil pindah** dari tab ke tombol avatar di header Jadwal agar jumlah tab tetap empat; keputusan final di Fase 0 oleh Dhimas (pemilik tab bar) bersama Ibrahim.
+- **Tab praktikan** saat ini Jadwal · Izin · Riwayat · Profil. Sprint 3 menjadikannya Jadwal · Peta · Izin · Riwayat, dengan **tombol aksi bulat** di tengah `PraktikanTabBar` membuka halaman presensi (diberi penanda bila ada sesi Dibuka yang belum dipresensi). **Profil pindah** dari tab ke tombol avatar di header Jadwal agar jumlah tab tetap empat; dikerjakan Dhimas (pemilik tab bar) di D-09.
 - Peta asisten dan praktikan memakai komponen yang sama dari `features/lab/LabMap`; perbedaan peran hanya pada isi panel (FR-47).
 - Notifikasi diketuk → root layout menavigasi sesuai `NotifPayload` (FR-52).
 
@@ -474,7 +474,7 @@ Dijalankan di dua HP Android (development build baru). Prasyarat: akun asisten (
 1. Asisten memindahkan sesi yang belum ditutup ke lab lain → HP Bagas menerima **notifikasi N4**; peta dan detail sesi ikut berubah.
 2. Citra mengajukan izin; asisten menolak → Citra menerima **notifikasi N3**; diketuk → detail izin.
 
-### Skenario Tepi (wajib lolos di Fase 2)
+### Skenario Tepi (wajib lolos di Tahap 7)
 
 | Kasus | Hasil yang diharapkan |
 | --- | --- |
@@ -542,88 +542,86 @@ Aturan 1–8 v2.2 tetap berlaku, dengan pemilik baru di atas. Tambahan:
 | `firestore.rules` | `attendances` `hasOnly` diperluas; `changedOnly` sesi Dibuka memakai `labId`; koleksi baru |
 | `logout()` | Juga menghapus token perangkat dan menghentikan watch posisi |
 
-## 11. Pembagian Tugas
+## 11. Pembagian Tugas dan Tahapan Pengerjaan
 
-Elang adalah Project Manager Sprint 3 dan tidak menulis kode fitur. Pengembangnya dua orang: **Dhimas** (fondasi native, data, lokasi, notifikasi, server) dan **Ibrahim** (UI kit, halaman presensi, sisi asisten, peta). Strategi tetap **kontrak lebih dulu**: Dhimas me-merge tanda tangan store/hook dengan implementasi sementara agar Ibrahim dapat membangun layar tanpa menunggu rebuild dan Firebase.
+Elang adalah Project Manager Sprint 3 dan tidak menulis kode fitur. Pengembangnya dua orang: **Dhimas** (fondasi native, data, lokasi, notifikasi, server) dan **Ibrahim** (UI kit, halaman presensi, sisi asisten, peta).
+
+**Batas pengerjaan: Senin.** Pengerjaan dilakukan **berurutan per tahap** (11.5), bukan paralel. Satu tahap dimulai setelah tahap sebelumnya selesai dan PR-nya di-merge. Di dalam tahap, tugas dikerjakan sesuai urutan nomornya; menunggu tugas rekan di tahap yang sama adalah bagian dari rencana.
 
 ### 11.1 Peran
 
 | Orang | Peran | Bertanggung jawab atas | Tidak mengerjakan |
 | --- | --- | --- | --- |
-| Elang | Project Manager | Lingkup dan prioritas, SRS, issue, konfirmasi ke asisten praktikum, koordinasi Blaze dan identitas aplikasi, persetujuan PR kontrak, review dan merge PR, uji integrasi, sign-off demo, form awal dan akhir | Menulis kode fitur, mengedit file developer |
+| Elang | Project Manager | Lingkup dan prioritas, SRS, issue, konfirmasi ke asisten praktikum, koordinasi Blaze dan identitas aplikasi, persetujuan PR kontrak, pemantauan urutan tahap, uji integrasi, sign-off demo, form awal dan akhir | Menulis kode fitur, mengedit file developer |
 | Dhimas | Developer: native + data + server | Konfigurasi dan rebuild, `types`, store, `services/`, Cloud Functions, rules, sisi praktikan yang sudah ada, README | `components/**`, `theme/`, `features/lab|presensi|asisten`, `asisten/**` |
 | Ibrahim | Developer: UI + presensi + asisten + peta | Komponen dan tema, halaman presensi, peta dan panel info lab, kelola lab, form sesi dengan lab, rekap, `DESIGN.md` | `services/`, `store/`, `types/`, rules, `functions/`, konfigurasi native |
 
 ### 11.2 Tugas Elang (PM)
 
-| ID | Tugas | Kapan | Hasil |
+| ID | Tugas | Tahap | Hasil |
 | --- | --- | --- | --- |
-| P-01 | Mengonfirmasi ke asisten praktikum: notifikasi lewat Cloud Functions + FCM, peta Google, marker = posisi perangkat sendiri, QR sebagai Could | Sesi pertama | Konfirmasi dicatat di 1.5 |
-| P-02 | Memastikan **Blaze + budget alert** aktif (dilakukan Dhimas sebagai owner) dan menyepakati `package` baru | Sebelum D-01 | Billing aktif; nama `package` final |
-| P-03 | Menyetujui PR kontrak: D-02 dan setiap perubahan `types`, tanda tangan store/hook, struktur Firestore, rules, atau Functions | Fase 0 dan seterusnya | PR kontrak disetujui |
-| P-04 | Menyusun daftar nama lab Informatika untuk data awal | Fase 0 | Data awal lab |
-| P-05 | Membuat issue per tugas, memantau progres harian, memutuskan penundaan Should/Could | Sepanjang sprint | Papan tugas, catatan di SRS |
-| P-06 | Review dan merge PR setelah 1 approval rekan; menjaga aturan proses (bagian 12) | Sepanjang sprint | Riwayat PR rapi |
-| P-07 | Checklist uji dari bagian 9 dan 6.5; memimpin gladi Fase 2; sign-off demo | Fase 2 | Checklist, daftar bug, sign-off |
-| P-08 | Memperbarui `docs/SRS.md`, form awal dan form akhir | Sepanjang sprint | SRS final, form terisi |
+| P-01 | Mengonfirmasi ke asisten praktikum: notifikasi lewat Cloud Functions + FCM, peta Google, marker = posisi perangkat sendiri, QR sebagai Could | 0 | Konfirmasi dicatat di 1.5 |
+| P-02 | Memastikan **Blaze + budget alert** aktif (dilakukan Dhimas sebagai owner) dan menyepakati `package` baru | 0 | Billing aktif; nama `package` final |
+| P-03 | Menyetujui PR kontrak: D-02 dan setiap perubahan `types`, tanda tangan store/hook, struktur Firestore, rules, atau Functions | 2 dan seterusnya | PR kontrak disetujui |
+| P-04 | Menyusun daftar nama lab Informatika untuk data awal | 0 | Data awal lab |
+| P-05 | Membuat issue per tugas, memantau urutan tahap, memutuskan penundaan Should/Could | Sepanjang sprint | Papan tugas, catatan di SRS |
+| P-06 | Meninjau PR kontrak sebelum di-merge, memantau PR lain, dan menjaga aturan proses (bagian 12) | Sepanjang sprint | Riwayat PR rapi |
+| P-07 | Checklist uji dari bagian 9 dan 6.5; memimpin gladi; sign-off | 7–8 | Checklist, daftar bug, sign-off |
+| P-08 | Memperbarui `docs/SRS.md`, form awal dan form akhir | 0 dan 8 | SRS final, form terisi |
 
 ### 11.3 Tugas Dhimas
 
 | ID | Tugas | FR / NFR | File utama | Bergantung pada | Selesai bila |
 | --- | --- | --- | --- | --- | --- |
 | D-01 | **Konfigurasi native + rebuild**: `package` baru, `userInterfaceStyle: "light"`, patch Expo, `expo-location`, `react-native-maps`, `expo-notifications` + config plugin, daftarkan app Android di Firebase (`google-services.json`), aktifkan Maps SDK for Android, API key terbatas lewat env, rebuild dev build, bagikan APK | 1.4, NFR-17 | `app.json`, `eas.json`, `package.json`, `google-services.json` | P-02 | APK baru terpasang di HP semua anggota; peta kosong tampil; izin lokasi dan notifikasi bisa diminta |
-| D-02 | Kontrak `types`, konstanta lokasi, tanda tangan store/hook (3.5) dengan implementasi sementara (data dummy lab, posisi dummy) | Bagian 3 | `types/`, `constants/location.ts`, `store/**` | n/a | PR disetujui PM; Ibrahim mulai I-03 dst. |
-| D-03 | Service dan store **lab** (listen, CRUD, cek dipakai, nama unik), `labId` di sesi, data awal lab | FR-40, FR-43, FR-04, FR-18 (data) | `services/labs.ts`, `services/sessions.ts`, `store/**`, `scripts/` | D-02 | Lab tersinkron realtime; hapus lab dipakai ditolak |
+| D-02 | Kontrak `types`, konstanta lokasi, tanda tangan store/hook (3.5) dengan implementasi sementara (data dummy lab, posisi dummy) | Bagian 3 | `types/`, `constants/location.ts`, `store/**` | D-01 | PR disetujui PM |
+| D-03 | Service dan store **lab** (listen, CRUD, cek dipakai, nama unik), `labId` di sesi, data awal lab, **rules `labs` dan perubahan rules `sessions`** (deploy) | FR-40, FR-43, FR-04, FR-18 (data), 6.3 | `services/labs.ts`, `services/sessions.ts`, `store/**`, `scripts/`, `firestore.rules` | D-02 | Lab tersinkron realtime; hapus lab dipakai ditolak; tulis lab diterima Firestore |
 | D-04 | Service dan store **lokasi**: izin, layanan mati, timeout, akurasi, `mocked`, buka pengaturan, aktifkan layanan, watch, `distanceM` | FR-35, FR-56–58, NFR-13, NFR-18 | `services/location.ts`, `store/**` | D-01, D-02 | Semua `LocationStatus` dapat dipicu dan teruji di HP |
-| D-05 | **Presensi berbasis lokasi** di store/service: pra-cek diperluas, bukti lokasi, pesan alasan; detail sesi praktikan diubah (tombol ke halaman presensi, nama lab) | FR-07, FR-34, FR-35, FR-38, FR-03 | `services/attendance.ts`, `store/**`, `praktikan/sesi/[id]`, `features/praktikan/**` | D-03, D-04 | Presensi berhasil di dalam radius, ditolak di luar radius |
-| D-06 | **Registrasi perangkat**: izin notifikasi, token, simpan/hapus di `devices`, handler notifikasi masuk dan diketuk di root layout | FR-50, FR-52, FR-53, FR-59 | `services/notifications.ts`, `store/**`, `app/_layout.tsx` | D-01 | Token tersimpan; notifikasi uji dari Console tampil dan navigasi benar |
+| D-05 | **Presensi berbasis lokasi** di store/service: pra-cek diperluas, bukti lokasi, pesan alasan; detail sesi praktikan diubah (tombol ke halaman presensi, nama lab); **rules `attendances` diperluas** (deploy) | FR-07, FR-34, FR-35, FR-38, FR-03, 6.3 | `services/attendance.ts`, `store/**`, `praktikan/sesi/[id]`, `features/praktikan/**`, `firestore.rules` | D-03, D-04 | Presensi berhasil di dalam radius, ditolak di luar radius |
+| D-06 | **Registrasi perangkat**: izin notifikasi, token, simpan/hapus di `devices`, handler notifikasi masuk dan diketuk di root layout; **rules `devices`** (deploy) | FR-50, FR-52, FR-53, FR-59, 6.3 | `services/notifications.ts`, `store/**`, `app/_layout.tsx`, `firestore.rules` | D-01 | Token tersimpan; notifikasi uji dari Console tampil dan navigasi benar |
 | D-07 | **Cloud Functions** N1–N4 (+ N5 Could), pembersihan token tidak valid, region sesuai Firestore, deploy | FR-51, FR-54, FR-55, NFR-14 | `functions/**` | D-06, P-02 | Tiga peristiwa demo memicu notifikasi ke penerima yang benar |
-| D-08 | **Rules** koleksi baru + perubahan sesi/presensi, uji 14 kasus di emulator, deploy | FR-31, 6.5 | `firestore.rules` | D-03, D-05 | 14 kasus lulus dan tercatat (uji emulator: Should bila waktu habis, minimal Rules Playground) |
-| D-09 | `PraktikanTabBar`: tab Peta + tombol aksi bulat ke halaman presensi dengan penanda sesi Dibuka | 8 | `praktikan/(tabs)/_layout.tsx`, `features/praktikan/PraktikanTabBar` | I-01 | Navigasi praktikan sesuai bagian 8 |
-| D-10 | README: `docs/README.md` diubah dari panduan per orang menjadi panduan setup proyek (Firebase Blaze, FCM, Maps key, Functions, emulator, hasil uji rules, akun seed); bagian basi dibersihkan (`KeluarButton`, env AI, Expo Go, switch peran di README root) | n/a | `docs/README.md`, `README.md` | Semua tugas Dhimas | Anggota baru dapat menjalankan proyek dari nol |
+| D-08 | **Uji rules** 14 kasus (6.5) di emulator atau Rules Playground, catat hasil, perbaiki rules bila ada yang gagal | FR-31, 6.5 | `firestore.rules`, `docs/README.md` | D-03, D-05, D-06 | 14 kasus lulus dan tercatat |
+| D-09 | `PraktikanTabBar`: tab Peta + tombol aksi bulat ke halaman presensi dengan penanda sesi Dibuka; Profil pindah ke header Jadwal | 8 | `praktikan/(tabs)/_layout.tsx`, `features/praktikan/PraktikanTabBar`, `praktikan/(tabs)/jadwal` | I-03 | Navigasi praktikan sesuai bagian 8 |
+| D-10 | README: `docs/README.md` diubah dari panduan per orang menjadi panduan setup proyek (Firebase Blaze, FCM, Maps key, Functions, emulator, hasil uji rules, akun seed); bagian basi dibersihkan (`KeluarButton`, env AI, Expo Go, switch peran di README root) | n/a | `docs/README.md`, `README.md` | D-08 | Anggota baru dapat menjalankan proyek dari nol |
 
-Urutan Dhimas: D-01 (jalur kritis), D-02, lalu D-03, D-04, D-06 paralel; D-05 setelah D-03 dan D-04; D-07 setelah D-06; D-08, D-09; D-10 terakhir.
+Rules ditulis **bersama fitur yang membutuhkannya** (D-03, D-05, D-06) karena Firestore menolak semua tulis ke koleksi yang belum diatur (deny by default). D-08 menguji rules secara menyeluruh di akhir.
 
 ### 11.4 Tugas Ibrahim
 
 | ID | Tugas | FR / NFR | File utama | Bergantung pada | Selesai bila |
 | --- | --- | --- | --- | --- | --- |
-| I-01 | Stub komponen baru dengan **props final**: `LocationStatusCard` (status, jarak, radius, akurasi, aksi), `PermissionPrompt` (judul, penjelasan, aksi utama/sekunder), `LabInfoSheet` (lab, sesi berlangsung, sesi berikutnya, onPilihSesi), `RadiusField` | NFR-02, NFR-16 | `components/**` | n/a | Dhimas dapat memakainya tanpa menunggu |
-| I-02 | Finalisasi komponen: semua `LocationStatus`, aksesibilitas, responsif | FR-36, FR-56–58, NFR-16 | `components/**`, `theme/**` | I-01 | Benar di 360dp, tablet, landscape |
-| I-03 | **Halaman presensi**: daftar sesi hari ini, info lokasi, form kode, sheet konfirmasi, pesan alasan | FR-32, FR-33, FR-36, FR-37 | `praktikan/presensi.tsx`, `features/presensi/**` | D-02; D-04/D-05 untuk data nyata | Alur 1 langkah 2–7 lolos |
-| I-04 | **Kelola lab** (asisten): daftar, form dengan peta, "Pakai lokasi saya", geser marker, lingkaran radius, hapus dengan konfirmasi | FR-40, FR-41, FR-43 | `asisten/lab/**`, `features/lab/LabForm`, `labValidation.ts` | D-02; D-03 | Lab tersimpan dan tampil di peta |
-| I-05 | **Form sesi dengan pilihan lab** dan ubah lab saat Dibuka | FR-04, FR-18 | `asisten/buat`, `features/asisten/SessionForm`, `sessionFormValidation.ts` | D-02; D-03 | Sesi baru wajib lab; ubah lab memicu N4 |
-| I-06 | **Peta lab** (asisten dan praktikan): marker, posisi sendiri, "Ke posisiku", "Lihat semua lab", panel info lab realtime, pengganti web | FR-44, FR-46–48 | `features/lab/LabMap`, `LabMarker`, `praktikan/(tabs)/peta`, `asisten/peta` | D-02; D-03, D-04 | Alur 2 lolos |
-| I-07 | Beranda asisten: pintasan Lab dan Peta; rekap dengan jarak presensi (+ peta kecil, Could) | FR-39, FR-49 | `asisten/index`, `asisten/sesi/[id]`, `features/asisten/RekapList` | D-05 | Rekap menampilkan jarak |
-| I-08 | Memperbarui `DESIGN.md`: pola status lokasi, permission prompt, peta, panel info lab; merapikan sisa token | n/a | `DESIGN.md` | I-02 | Panduan terdokumentasi |
+| I-01 | Stub komponen baru dengan **props final**: `LocationStatusCard` (status, jarak, radius, akurasi, aksi), `PermissionPrompt` (judul, penjelasan, aksi utama/sekunder), `LabInfoSheet` (lab, sesi berlangsung, sesi berikutnya, onPilihSesi), `RadiusField` | NFR-02, NFR-16 | `components/**` | D-02 | Props final di-merge dan dapat dipakai |
+| I-02 | Finalisasi komponen: semua `LocationStatus`, aksesibilitas, responsif | FR-36, FR-56–58, NFR-16 | `components/**`, `theme/**` | I-01, D-04 | Benar di 360dp, tablet, landscape |
+| I-03 | **Halaman presensi**: daftar sesi hari ini, info lokasi, form kode, sheet konfirmasi, pesan alasan | FR-32, FR-33, FR-36, FR-37 | `praktikan/presensi.tsx`, `features/presensi/**` | I-02, D-05 | Alur 1 langkah 3–7 lolos |
+| I-04 | **Kelola lab** (asisten): daftar, form dengan peta, "Pakai lokasi saya", geser marker, lingkaran radius, hapus dengan konfirmasi | FR-40, FR-41, FR-43 | `asisten/lab/**`, `features/lab/LabForm`, `labValidation.ts` | I-01, D-03 | Lab tersimpan dan tampil di peta |
+| I-05 | **Form sesi dengan pilihan lab** dan ubah lab saat Dibuka | FR-04, FR-18 | `asisten/buat`, `features/asisten/SessionForm`, `sessionFormValidation.ts` | I-04 | Sesi baru wajib lab; lab sesi bisa diubah |
+| I-06 | **Peta lab** (asisten dan praktikan): marker, posisi sendiri, "Ke posisiku", "Lihat semua lab", panel info lab realtime, pengganti web | FR-44, FR-46–48 | `features/lab/LabMap`, `LabMarker`, `praktikan/(tabs)/peta`, `asisten/peta` | D-09 | Alur 2 lolos |
+| I-07 | Beranda asisten: pintasan Lab dan Peta; rekap dengan jarak presensi (+ peta kecil, Could) | FR-39, FR-49 | `asisten/index`, `asisten/sesi/[id]`, `features/asisten/RekapList` | I-06 | Rekap menampilkan jarak |
+| I-08 | Memperbarui `DESIGN.md`: pola status lokasi, permission prompt, peta, panel info lab; merapikan sisa token | n/a | `DESIGN.md` | Tahap 7 | Panduan terdokumentasi |
 
-Urutan Ibrahim: I-01, I-02, lalu I-03, I-04, I-05, I-06, I-07; I-08 terakhir.
+### 11.5 Tahapan Pengerjaan
 
-### 11.5 Serah-terima antara Dhimas dan Ibrahim
+Urutan wajib. Kolom **Urutan** dibaca dari kiri ke kanan; panah berarti tugas di kanan dimulai setelah tugas di kiri di-merge.
 
-| Serah-terima | Dari | Ke | Dibutuhkan sebelum |
-| --- | --- | --- | --- |
-| APK development build baru (D-01) | Dhimas | Ibrahim, Elang | Uji peta, lokasi, notifikasi di HP |
-| Kontrak `types` dan store/hook (D-02) | Dhimas | Ibrahim | I-03 s.d. I-07 dimulai |
-| Props final komponen (I-01) | Ibrahim | Dhimas | D-05, D-09 |
-| Service lab aktif (D-03) | Dhimas | Ibrahim | Uji I-04, I-05, I-06 dengan data nyata |
-| Service lokasi + presensi aktif (D-04, D-05) | Dhimas | Ibrahim | Uji I-03 dengan data nyata |
-| Functions aktif (D-07) | Dhimas | Elang | Gladi Alur 1 dan 3 |
-
-Aturan kerja: tugas selesai bila PR di-merge, `npx tsc --noEmit` lolos, diuji pemiliknya di HP (development build baru) atau web, dan disetujui satu reviewer.
-
-### 11.6 Fase dan Jadwal
-
-| Fase | Waktu | Isi |
+| Tahap | Urutan | Selesai bila (gerbang ke tahap berikutnya) |
 | --- | --- | --- |
-| Fase 0: Kontrak dan rebuild | Rabu–Kamis | P-01, P-02, D-01, D-02, I-01 |
-| Fase 1: Paralel | Kamis–Senin | D-03 s.d. D-09, I-02 s.d. I-07 |
-| Fase 2: Integrasi | Selasa | Gladi tiga alur di dua HP, skenario tepi, uji rules, cross review, perbaikan bug, I-08, D-10 |
-| Demo | Rabu | Presentasi ke asisten praktikum |
+| **0. Persiapan** | P-01 → P-02 → P-04 → P-08 (form awal) | Billing aktif, `package` disepakati, daftar lab tersedia |
+| **1. Fondasi native** | D-01 | APK baru terpasang di HP semua anggota |
+| **2. Kontrak** | D-02 → I-01 | Kontrak data dan props komponen di-merge |
+| **3. Lab** | D-03 → I-04 → I-05 | Asisten dapat membuat lab dan sesi yang memakai lab |
+| **4. Lokasi dan presensi** | D-04 → D-05 → I-02 → I-03 → D-09 | Alur 1 lolos tanpa notifikasi (presensi di dalam radius berhasil, di luar radius ditolak) |
+| **5. Peta dan info lab** | I-06 → I-07 | Alur 2 lolos |
+| **6. Notifikasi** | D-06 → D-07 | Alur 3 lolos; Alur 1 lolos lengkap dengan notifikasi |
+| **7. Pengujian** | D-08 → gladi tiga alur di dua HP → skenario tepi → perbaikan bug oleh pemilik file | Semua Must lolos; daftar bug kosong atau tercatat sebagai Should/Could |
+| **8. Dokumen dan penutupan** | I-08 → D-10 → P-07 (sign-off) → P-08 (SRS final, form akhir) | **Senin** |
 
-**Jalur kritis:** P-02 → D-01 (rebuild) → semua uji di HP. Bila D-01 terlambat, Ibrahim tetap membangun UI dengan data sementara dan web; D-01 adalah prioritas pertama Dhimas.
+Catatan urutan:
 
-### 11.7 Fase 2: Integrasi dan Hardening
+- **Jalur kritis** adalah Tahap 0 → Tahap 1. Tanpa APK baru, lokasi, peta, dan notifikasi tidak dapat diuji di HP.
+- Dhimas lebih banyak bekerja di tahap awal (1–4), Ibrahim di tahap tengah (3–5). Selama menunggu, tiap orang boleh menyiapkan pekerjaan di branch-nya sendiri, tetapi **PR dibuka dan di-merge sesuai urutan**.
+- Bila satu tahap tersendat, PM memutuskan apakah tugas Should/Could di tahap itu ditunda (bagian 14), bukan melompati tahap.
+
+### 11.6 Pengujian dan Penutupan (Tahap 7–8)
 
 | Kegiatan | Pemimpin | Peserta |
 | --- | --- | --- |
@@ -632,13 +630,13 @@ Aturan kerja: tugas selesai bila PR di-merge, `npx tsc --noEmit` lolos, diuji pe
 | Skenario tepi lokasi dan notifikasi | Dhimas | Ibrahim menguji, Elang mencatat |
 | Uji rules 14 kasus | Dhimas | Ibrahim mereview |
 | Cek responsif, landscape, aksesibilitas peta | Ibrahim | Dhimas |
-| Cross code review | Dhimas mereview PR Ibrahim, Ibrahim mereview PR Dhimas | Elang merge |
+| Cross code review (tinjauan pasca-merge bila PR sudah masuk) | Dhimas meninjau PR Ibrahim, Ibrahim meninjau PR Dhimas | Elang mencatat temuan sebagai tugas perbaikan |
 | Perbaikan bug | Pemilik file | Elang memantau |
 | Sign-off, rekaman demo, SRS final, README | Elang | Ibrahim menyiapkan tangkapan layar, Dhimas melengkapi README |
 
 ## 12. Alur Git dan Konfigurasi
 
-- `main` diproteksi: wajib PR + **1 approval**, berlaku juga untuk admin, tanpa push langsung dan tanpa force push. Proteksi tidak boleh dimatikan.
+- `main` diproteksi: semua perubahan **wajib lewat PR**, berlaku juga untuk admin, tanpa push langsung dan tanpa force push. **Approval tidak diwajibkan**: pemilik PR boleh me-merge sendiri setelah `npx tsc --noEmit` lolos dan fiturnya dites. Review rekan tetap dianjurkan, dan **wajib** (minimal komentar setuju dari PM) untuk PR kontrak: `types`, tanda tangan store/hook, struktur Firestore, rules, dan Functions. Proteksi tidak boleh dimatikan.
 - Branch otomatis dihapus setelah PR di-merge. PR bertumpuk tetap **draft** dan base-nya dipindah ke `main` sebelum di-merge.
 - Branch: `feat/dhimas-<topik>`, `feat/ibrahim-<topik>`, `chore/...`, `fix/...`. Satu tugas (D-xx/I-xx) = satu PR.
 - Commit **head-body**: `feat: ...` / `fix: ...` / `chore: ...` / `docs: ...` huruf kecil, **tanpa scope dalam kurung**, tanpa titik, body menjelaskan kenapa. Tanpa trailer `Co-Authored-By`.
@@ -654,21 +652,21 @@ Aturan kerja: tugas selesai bila PR di-merge, `npx tsc --noEmit` lolos, diuji pe
 - Skenario tepi bagian 9 tertangani.
 - Tidak ada `console.error`, tidak ada `any`, tidak ada warna langsung di luar `src/theme`, `npx tsc --noEmit` lolos.
 - Tidak ada rahasia di repo; budget alert aktif; API key Maps dibatasi.
-- Semua perubahan lewat PR yang direview; tidak ada push langsung ke `main`.
+- Semua perubahan lewat PR; PR kontrak disetujui PM; tidak ada push langsung ke `main`.
 - `docs/SRS.md`, `docs/README.md`, dan `DESIGN.md` diperbarui. PM memberi sign-off setelah gladi bersama.
 
 ## 14. Risiko dan Catatan
 
 | Risiko | Mitigasi |
 | --- | --- |
-| Akun billing tidak dapat dipasang (Blaze gagal) | Rencana cadangan: notifikasi dikirim dari aplikasi asisten lewat Expo Push Service (kelemahan keamanan dan keandalan dicatat di README); peta memakai MapLibre + tile OpenStreetMap dengan atribusi. PM memutuskan paling lambat Kamis |
-| Rebuild (D-01) terlambat atau gagal | Prioritas pertama Dhimas; Ibrahim bekerja dengan data sementara dan web |
+| Akun billing tidak dapat dipasang (Blaze gagal) | Rencana cadangan: notifikasi dikirim dari aplikasi asisten lewat Expo Push Service (kelemahan keamanan dan keandalan dicatat di README); peta memakai MapLibre + tile OpenStreetMap dengan atribusi. PM memutuskan di Tahap 0, sebelum D-01 |
+| Rebuild (D-01) terlambat atau gagal | Tahap 1 adalah jalur kritis dan prioritas pertama Dhimas; selama menunggu, Ibrahim menyiapkan komponen di branch-nya dan mengecek tampilan lewat web |
 | GPS dalam ruangan tidak akurat | Radius 50 m, batas akurasi 50 m, lab demo diatur di ruang demo, tombol "Perbarui lokasi" |
 | Lokasi dipalsukan | Deteksi `mocked`, kode sesi, bukti lokasi di rekap, rules memvalidasi bukti; risiko sisa dicatat (6.4) |
 | Notifikasi lambat atau tidak muncul saat demo | Uji sehari sebelum demo; izin notifikasi dan pengecualian hemat baterai diperiksa; sumber kebenaran tetap data di aplikasi |
 | API key Maps disalahgunakan | Kunci dibatasi `package` + SHA-1, tidak di-commit, budget alert |
-| Beban Dhimas terlalu berat (native + data + server) | Tugas UI dipusatkan ke Ibrahim; D-08 uji emulator dan FR-54/55 boleh digeser; PM memantau harian |
-| Peralihan kepemilikan file Elang ke Ibrahim | Elang menjelaskan struktur UI kit dan sisi asisten di awal sprint; `DESIGN.md` menjadi acuan |
+| Beban Dhimas terlalu berat (native + data + server) | Tugas UI dipusatkan ke Ibrahim; uji emulator di D-08 boleh diganti Rules Playground dan FR-54/55 boleh digeser; PM memantau tiap tahap |
+| Peralihan kepemilikan file Elang ke Ibrahim | Elang menjelaskan struktur UI kit dan sisi asisten di Tahap 0; `DESIGN.md` menjadi acuan |
 | Konflik merge pada `types`, `store`, rules, Functions | Pemilik tunggal Dhimas; perubahan kontrak diumumkan dan disetujui PM |
 | Sesi lama tanpa `labId` | Tampil "Lab belum diatur"; presensi ditolak `NO_LAB`; asisten dapat memilih lab lewat ubah sesi |
 
@@ -679,3 +677,4 @@ Aturan kerja: tugas selesai bila PR di-merge, `npx tsc --noEmit` lolos, diuji pe
 | 1.0–1.3 | Sprint 1 (lihat SRS v1.3) |
 | 2.0–2.2 | Sprint 2 (lihat SRS v2.2) |
 | 3.0 | **Sprint 3.** PM Elang; developer Dhimas dan Ibrahim; file milik Elang berpindah ke Ibrahim. Paket Blaze, Cloud Functions + FCM untuk notifikasi berbasis peristiwa (N1–N5), `expo-notifications`, `react-native-maps` (Google), `expo-location` foreground. Halaman presensi khusus, presensi berbasis lokasi dengan bukti lokasi, koleksi `labs` dan pengelolaannya, sesi merujuk `labId`, peta lab dengan posisi perangkat sendiri dan panel aktivitas lab, penanganan izin dan kondisi perangkat. Menambah FR-32 s.d. FR-59, NFR-13 s.d. NFR-18, 5 kasus uji rules, tiga alur demo, struktur file dan tugas P-/D-/I- baru, rencana cadangan bila billing gagal |
+| 3.1 | Pengerjaan diubah dari fase paralel bertanggal menjadi **tahapan berurutan** (11.5) dengan batas Senin; rules ditulis bersama fiturnya (D-03, D-05, D-06) dan D-08 menjadi uji rules menyeluruh; ketergantungan tugas disesuaikan dengan urutan tahap; approval PR tidak diwajibkan kecuali PR kontrak (bagian 12) |
