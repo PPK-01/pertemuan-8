@@ -6,14 +6,15 @@
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "rawuh",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.laangid.rawuh",
+      "bundleIdentifier": "com.ppk01.rawuh",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "NSLocationWhenInUseUsageDescription": "Rawuh membutuhkan lokasimu untuk memastikan kamu berada di lab saat presensi."
       }
     },
     "android": {
@@ -24,7 +25,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.laangid.pertemuan6"
+      "package": "com.ppk01.rawuh",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -38,6 +40,20 @@
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Rawuh membutuhkan lokasimu untuk memastikan kamu berada di lab saat presensi."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#208AEF"
         }
       ]
     ],
