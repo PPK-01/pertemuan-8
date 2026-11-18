@@ -1,6 +1,6 @@
 # SRS & Rencana Kerja Sprint 3: Aplikasi Presensi Praktikum "Rawuh" (Lokasi, Peta, dan Notifikasi)
 
-PM: Elang · Tim: Dhimas, Ibrahim · Sprint: 3 · Versi 3.1 (lanjutan SRS v2.2) · Repo: `PPK-01/pertemuan-8` · Batas pengerjaan: Senin
+PM: Elang · Tim: Dhimas, Ibrahim · Sprint: 3 · Versi 3.2 (lanjutan SRS v2.2) · Repo: `PPK-01/pertemuan-8` · Batas pengerjaan: Senin
 
 > **Versi sebelumnya:** SRS v1.3 (Sprint 1) di `docs/arsip/SRS-v1.3-sprint-1.md`, SRS v2.2 (Sprint 2) di `docs/arsip/SRS-v2.2-sprint-2.md`. Komentar kode dan `DESIGN.md` yang ditulis sebelum Sprint 3 dengan rujukan "SRS §x" atau "SRS v2.2 §x" mengacu ke **v2.2**. Rujukan baru sejak Sprint 3 ditulis "SRS v3 §x".
 
@@ -18,7 +18,7 @@ Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SR
 - Presensi wajib lolos **validasi lokasi**: sesi Dibuka **dan** perangkat berada di dalam radius lab sesi.
 - Data **lab** (nama, koordinat, radius) dikelola asisten dan disimpan di Firestore. Sesi kini merujuk lab (`labId`) sebagai pengganti teks `ruang`.
 - **Peta lab interaktif** dengan marker lab, posisi perangkat sendiri, dan panel **informasi aktivitas lab** (sesi yang berlangsung dan berikutnya) yang realtime.
-- **Push notification** lewat Firebase Cloud Messaging (FCM), dikirim oleh Cloud Functions berdasarkan peristiwa, hanya ke pengguna terkait.
+- **Push notification** lewat Expo Push Service (diteruskan ke Firebase Cloud Messaging di Android), dikirim aplikasi asisten segera setelah peristiwa terjadi, hanya ke pengguna terkait.
 - Penanganan **izin dan kondisi perangkat**: izin lokasi ditolak, layanan lokasi mati, lokasi palsu, akurasi buruk, dan koneksi bermasalah.
 - **Rebuild** development build dengan identitas aplikasi baru dan modul native baru.
 
@@ -36,26 +36,25 @@ Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SR
 
 | Aspek | Keputusan | Alasan |
 | --- | --- | --- |
-| Paket Firebase | **Blaze** (pay-as-you-go) dengan **budget alert** | Cloud Functions hanya tersedia di Blaze; pemakaian kelas berada di kuota gratis. Alternatif Spark (notifikasi dikirim dari HP asisten) ditolak karena token praktikan harus terbaca klien dan pengiriman tidak andal |
-| Pengirim notifikasi | **Cloud Functions for Firebase** (Firestore trigger, Node.js) di folder `functions/`, mengirim lewat `firebase-admin` (FCM) | Notifikasi benar-benar dipicu peristiwa di server; perubahan dari Console pun memicu notifikasi; token hanya dibaca server |
-| Penerima notifikasi | **`expo-notifications`**: izin notifikasi, token FCM perangkat (`getDevicePushTokenAsync`), handler notifikasi masuk dan diketuk | Pustaka resmi Expo untuk development build; memakai FCM langsung tanpa perantara Expo Push Service |
-| `google-services.json` | Ditambahkan **hanya untuk FCM** (kebutuhan `expo-notifications` di Android). Auth dan Firestore **tetap** memakai Firebase JS SDK | Sprint 2 menghindari file ini karena tidak dibutuhkan JS SDK; FCM native membutuhkannya. Tidak memuat rahasia |
-| Peta | **`react-native-maps`** dengan `PROVIDER_GOOGLE` (Maps SDK for Android) | Paling matang, marker dan titik pengguna bawaan. Pemuatan peta seluler gratis tanpa batas, tetapi billing harus aktif (memakai akun billing yang sama). `expo-maps` ditolak (alpha); MapLibre + OpenStreetMap menjadi cadangan (bagian 14) |
-| API key Maps | Dibatasi ke `package` Android + SHA-1 development build; disuntikkan lewat env saat build, tidak di-commit | Mencegah penyalahgunaan kunci |
+| Biaya | **Seluruh layanan gratis tanpa kartu dan tanpa langganan.** Firebase **tetap paket Spark**; tidak ada layanan yang mewajibkan akun billing | Ketentuan PM. Karena itu Cloud Functions (wajib Blaze) dan Google Maps (wajib billing) tidak dipakai |
+| Pengirim notifikasi | **Expo Push Service**, dipanggil dari aplikasi asisten (`services/push.ts`) segera setelah aksi yang menjadi peristiwa berhasil (buat sesi, buka sesi, putuskan izin, pindah lab) | Gratis tanpa kartu; di Android diteruskan lewat FCM. Keempat peristiwa wajib dipicu aksi asisten di aplikasi, jadi tidak perlu server. Ditolak: Cloud Functions (wajib Blaze), server terpisah gratis seperti Cloudflare Workers (lebih aman, tetapi menambah platform dan beban kerja; cadangan di bagian 14), OneSignal (tetap butuh server), notifikasi lokal (bukan push) |
+| Penerima notifikasi | **`expo-notifications`**: izin notifikasi, **Expo push token** (`getExpoPushTokenAsync`), handler notifikasi masuk dan diketuk | Pustaka resmi Expo untuk development build; token yang sama dipakai Expo Push Service |
+| Kredensial FCM | `google-services.json` ditambahkan di aplikasi (tidak memuat rahasia). **Kunci akun layanan FCM V1** diunggah ke kredensial EAS oleh Dhimas dan **tidak pernah masuk repo**. Auth dan Firestore **tetap** memakai Firebase JS SDK | Syarat Expo Push Service untuk mengirim lewat FCM di Android; gratis |
+| Peta | **`@maplibre/maplibre-react-native`** dengan style vektor **OpenFreeMap** (tanpa API key, tanpa registrasi, tanpa batas tampilan), atribusi OpenStreetMap ditampilkan di peta | Satu-satunya opsi native yang gratis tanpa kartu dan tanpa pendaftaran. Ditolak: Google Maps / `react-native-maps` / `expo-maps` (wajib billing), tile server OpenStreetMap langsung (melarang pemakaian berat oleh aplikasi), MapTiler/Mapbox (butuh akun dan kunci). Cadangan: WebView + MapLibre GL JS + OpenFreeMap (bagian 14) |
 | Lokasi | **`expo-location`**, hanya **foreground** | Cukup untuk presensi, peta, dan form lab; privasi terjaga |
 | Marker pengguna | Posisi **perangkat sendiri**, diperbarui realtime di perangkat (`watchPositionAsync`) selama layar peta terbuka, tidak dikirim ke server | Privasi, kuota tulis Firestore, dan baterai |
 | Validasi radius | Jarak dihitung di klien (rumus haversine); bukti lokasi disimpan di dokumen presensi; rules memeriksa konsistensi bukti dengan radius lab | Rules Firestore tidak dapat membaca GPS (risiko sisa di 6.4) |
-| Identitas aplikasi | `package` Android baru (usulan `com.ppk01.rawuh`), `userInterfaceStyle: "light"`, pembaruan patch Expo, dalam **satu rebuild** di Tahap 1 | FCM dan API key Maps terikat ke `package` dan SHA-1; satu rebuild untuk semua perubahan native |
-| Web | Tetap didukung untuk uji tampilan; **peta diganti daftar lab** di web karena `react-native-maps` tidak mendukung web; lokasi di web memakai geolocation browser; notifikasi tidak aktif di web | NFR-06 dipertahankan sejauh mungkin |
+| Identitas aplikasi | `package` Android baru **`com.ppk01.rawuh`**, `userInterfaceStyle: "light"`, pembaruan patch Expo, dalam **satu rebuild** di Tahap 1. Akun EAS (rebuild, kredensial FCM) dipegang Dhimas | Pendaftaran FCM terikat ke `package`; satu rebuild untuk semua perubahan native |
+| Web | Tetap didukung untuk uji tampilan; **peta diganti daftar lab** di web (MapLibre native tidak berjalan di web); lokasi di web memakai geolocation browser; notifikasi tidak aktif di web. Demo hanya di Android | NFR-06 dipertahankan sejauh mungkin |
 
-Dependency baru dipasang sekali di Tahap 1 (D-01) oleh Dhimas: `expo-location`, `react-native-maps`, `expo-notifications`, `expo-device` (bila dibutuhkan `expo-notifications`), lewat `npx expo install`. `functions/package.json` milik Dhimas dan terpisah dari `package.json` aplikasi.
+Dependency baru dipasang sekali di Tahap 1 (D-01) oleh Dhimas: `expo-location`, `@maplibre/maplibre-react-native`, `expo-notifications`, `expo-device` (bila dibutuhkan `expo-notifications`), lewat `npx expo install`. Tidak ada folder `functions/` dan tidak ada server tambahan.
 
 ### 1.5 Asumsi dan Hal yang Masih Terbuka
 
 1. Elang (developer pada Sprint 1–2) menjadi Project Manager Sprint 3 dan tidak menulis kode fitur; pengembangnya Dhimas dan Ibrahim. File yang pada v2.2 dimiliki Elang (UI kit, tema, sisi asisten, `DESIGN.md`) berpindah ke Ibrahim.
-2. **Paket Blaze dan akun billing** dapat dipasang oleh owner project (Dhimas). Bila tidak, rencana cadangan di bagian 14 berlaku.
-3. Penafsiran "marker pengguna realtime" sebagai posisi perangkat sendiri, pengiriman notifikasi lewat Cloud Functions, dan peta Google **dikonfirmasi ke asisten praktikum** (P-01).
-4. Lab Informatika awal diisi dari daftar nama lab (P-04); koordinatnya diatur asisten lewat aplikasi. Untuk demo, lab demo diatur di ruang demo.
+2. **Semua layanan gratis tanpa kartu** (Firebase Spark, Expo Push Service, OpenFreeMap). OpenFreeMap disediakan apa adanya; bila tidak tersedia saat demo, rencana cadangan di bagian 14 berlaku.
+3. Studi kasus sengaja dipaparkan umum oleh asisten praktikum dan implementasinya dibebaskan ke tiap kelompok. Penafsiran tim: "marker pengguna realtime" = posisi perangkat sendiri; notifikasi dikirim dari aplikasi asisten; QR code sebagai Could.
+4. Lab Informatika awal diisi dari daftar nama lab (P-03); koordinatnya diatur asisten lewat aplikasi. Untuk demo, lab demo diatur di ruang demo.
 5. Akurasi GPS di dalam gedung dapat buruk; radius bawaan 50 m dan batas akurasi 50 m dipilih untuk keperluan demo dan dapat disesuaikan.
 
 ## 2. Aktor dan Hak Akses
@@ -81,14 +80,14 @@ labs/{labId}                   { nama, gedung?, lat, lng, radiusM,
 sessions/{sessionId}           { ...v2.2, labId }                                     // labId BARU; `ruang` lihat 3.2
 attendances/{sessionId}_{uid}  { ...v2.2, labId,
                                  lokasi: { lat, lng, akurasiM, jarakM, mocked } }       // DIUBAH
-users/{uid}/devices/{deviceId} { token, platform, updatedAt }                          // BARU
+users/{uid}/devices/{deviceId} { token, platform, updatedAt }                          // BARU; token = Expo push token
 ```
 
 Keputusan struktur:
 
 - **Sesi merujuk lab lewat `labId`.** Nama, koordinat, dan radius selalu dibaca dari `labs`, sehingga perubahan lab langsung tercermin di semua sesi dan peta.
 - **Bukti lokasi disimpan di dokumen presensi** (koordinat, akurasi, jarak, status `mocked`) agar asisten dapat memeriksa dan rules dapat memvalidasi konsistensinya.
-- **Token perangkat di subkoleksi `devices`** milik pengguna. Satu pengguna dapat memiliki beberapa perangkat. `deviceId` diturunkan dari token (mis. hash) agar penulisan ulang token yang sama tidak menggandakan dokumen.
+- **Token perangkat di subkoleksi `devices`** milik pengguna. Satu pengguna dapat memiliki beberapa perangkat. `deviceId` diturunkan dari token (mis. hash) agar penulisan ulang token yang sama tidak menggandakan dokumen. Asisten dapat **membaca** token praktikan untuk mengirim notifikasi, tetapi tidak dapat mengubahnya.
 
 ### 3.2 Model Domain (perubahan pada `src/types/index.ts`)
 
@@ -167,15 +166,16 @@ Posisi diambil ulang tepat sebelum menulis bila posisi terakhir lebih tua dari 3
 ### 3.4 Alur Notifikasi
 
 ```
-[aksi di aplikasi atau Console] -> dokumen Firestore berubah
-   -> Cloud Function (onDocumentCreated / onDocumentUpdated) mendeteksi peristiwa N1–N4
-   -> menentukan penerima (praktikan kelas sesi, atau pengaju izin)
-   -> membaca users/{uid}/devices -> firebase-admin messaging.sendEachForMulticast
-   -> token tidak valid dihapus (FR-54)
+[aplikasi asisten] aksi berhasil ditulis ke Firestore (buat sesi, buka sesi, putuskan izin, ubah lab sesi/lab)
+   -> store menentukan penerima (praktikan kelas sesi, atau pengaju izin) dari cache `users`
+   -> membaca users/{uid}/devices penerima -> services/push.ts mengirim ke Expo Push API
+      (POST https://exp.host/--/api/v2/push/send, maksimal 100 pesan per permintaan)
+   -> Expo Push Service meneruskan lewat FCM ke perangkat Android
+   -> token yang ditolak (`DeviceNotRegistered`) dihapus (FR-54)
 [perangkat] -> notifikasi tampil -> diketuk -> root layout membaca `data` -> navigasi ke layar terkait
 ```
 
-Region Cloud Functions disamakan dengan lokasi database Firestore.
+Pengiriman notifikasi dilakukan **setelah** penulisan berhasil dan **tidak menggagalkan** aksi: bila pengiriman gagal, aksi tetap sukses dan kegagalan hanya dicatat (tanpa `console.error`). Perubahan langsung dari Firebase Console tidak memicu notifikasi.
 
 ### 3.5 Kontrak Layer Data (tambahan)
 
@@ -187,8 +187,7 @@ services/location.ts      getPermission, requestPermission, openSettings, isServ
 services/attendance.ts    submitAttendance(sessionId, code, position) /* + labId, lokasi */
 services/notifications.ts getNotifPermission, requestNotifPermission, getDeviceToken,
                           saveDeviceToken, removeDeviceToken, addNotificationListeners
-functions/src/index.ts    onSessionCreated (N2), onSessionUpdated (N1, N4),
-                          onLabUpdated (N4), onIzinUpdated (N3)
+services/push.ts          sendPush(messages) /* Expo Push API, batch ≤ 100, kembalikan token yang ditolak */
 ```
 
 **Kontrak store (tambahan pada `src/store/appStore.ts`)**
@@ -204,6 +203,8 @@ Aksi  : addLab(input) / updateLab(id, patch) / deleteLab(id)  -> Promise<Result>
         enableLocationServices()     -> Promise<LocationStatus>   // dialog sistem Android
         submitAttendance(sessionId, code) -> Promise<AttendResult> // posisi diambil dari state, divalidasi ulang
         registerDevice()             -> Promise<void>              // dipanggil setelah login
+        // createSession, openSession, updateSession (labId berubah), updateLab (koordinat/nama berubah),
+        // reviewIzin memanggil notify(peristiwa) setelah berhasil; hasil aksi tidak bergantung pada notifikasi
         // logout() kini juga menghapus token perangkat ini dan menghentikan watch lokasi
 Hook baca (* baru):
         useLabs()*, useLabById(id)*, useLabForSession(sessionId)*,
@@ -215,7 +216,7 @@ Hook baca (* baru):
         useNotifPermission()*
 ```
 
-`services/location.ts` dan `services/notifications.ts` hanya diimpor oleh `store/` (aturan v2.2). Komponen peta `react-native-maps` dipakai di `features/lab/**`, bukan di `components/**`.
+`services/location.ts`, `services/notifications.ts`, dan `services/push.ts` hanya diimpor oleh `store/` (aturan v2.2). Komponen peta MapLibre dipakai di `features/lab/**`, bukan di `components/**`.
 
 **Mode pengembangan tanpa Firebase.** Mode in-memory ditambah data dummy lab (minimal 3 lab, satu di antaranya tanpa sesi). Lokasi di mode ini memakai posisi perangkat sungguhan bila tersedia; konstanta pengembangan `DEV_FAKE_POSITION` (hanya `__DEV__`) boleh dipakai untuk menguji "di dalam radius" dan "di luar radius" di web.
 
@@ -270,11 +271,11 @@ Kolom **Status** membandingkan dengan SRS v2.2: *Tetap*, *Diubah*, atau *Baru*.
 | ID | Kebutuhan | Peran | Status | Prioritas |
 | --- | --- | --- | --- | --- |
 | FR-50 | Setelah login, aplikasi meminta izin notifikasi (dengan penjelasan singkat) lalu menyimpan token FCM perangkat di `users/{uid}/devices`. Saat logout, token perangkat itu dihapus. | Keduanya | Baru | Must |
-| FR-51 | Cloud Functions mengirim notifikasi berdasarkan peristiwa, **hanya ke pengguna terkait** (tabel 4.4). | Praktikan | Baru | Must |
+| FR-51 | Aplikasi asisten mengirim notifikasi lewat Expo Push Service (FCM) segera setelah peristiwa berhasil, **hanya ke pengguna terkait** (tabel 4.4). Kegagalan pengiriman tidak menggagalkan aksi. | Asisten → Praktikan | Baru | Must |
 | FR-52 | Mengetuk notifikasi membuka layar terkait: N1 → halaman presensi, N2/N4 → detail sesi, N3 → detail izin. Bila belum login, layar dibuka setelah login. | Praktikan | Baru | Must |
 | FR-53 | Notifikasi yang masuk saat aplikasi terbuka tetap tampil sebagai banner sistem. | Praktikan | Baru | Must |
-| FR-54 | Token tidak valid (aplikasi dihapus, token kedaluwarsa) dihapus otomatis oleh Function saat pengiriman gagal. | n/a | Baru | Should |
-| FR-55 | Asisten pembuat sesi menerima notifikasi saat ada **izin baru** untuk sesinya. | Asisten | Baru | Could |
+| FR-54 | Token yang ditolak Expo Push Service (`DeviceNotRegistered`) dihapus oleh aplikasi pengirim; token perangkat diperbarui setiap login. | n/a | Baru | Should |
+| FR-55 | Asisten pembuat sesi menerima notifikasi saat ada **izin baru** untuk sesinya (dikirim aplikasi praktikan; butuh izin baca token asisten pembuat sesi di rules). | Asisten | Baru | Could |
 
 **Izin dan kondisi perangkat**
 
@@ -335,7 +336,7 @@ Pesan error v2.2 tetap berlaku. Urutan pra-cek presensi v2.2 diperluas: offline 
 | N4 | `labId` sesi yang belum Ditutup berubah, **atau** koordinat/nama lab yang dipakai sesi yang belum Ditutup berubah | Praktikan kelas sesi tersebut | "Lokasi praktikum berubah" / "{Praktikum} kini di {Lab}." | Detail sesi |
 | N5 (Could) | Izin baru dibuat | Asisten pembuat sesi | "Izin baru" / "{Nama} mengajukan izin untuk {Praktikum}." | Detail izin asisten |
 
-Function tidak mengirim notifikasi ganda untuk satu peristiwa (mis. N2 tidak terkirim lagi saat sesi diubah). N4 dari perubahan lab dikirim satu kali per sesi terdampak.
+N1–N4 dikirim **aplikasi asisten**; N5 dikirim aplikasi praktikan. Aplikasi tidak mengirim notifikasi ganda untuk satu peristiwa (mis. N2 tidak terkirim lagi saat sesi diubah). N4 dari perubahan lab dikirim satu kali per sesi terdampak.
 
 ## 5. Integrasi AI
 
@@ -346,8 +347,8 @@ Tidak berubah dari v2.2 bagian 5.
 ### 6.1 Prinsip (tambahan)
 
 - Lokasi diperlakukan sebagai data pribadi: hanya dikirim saat presensi berhasil, hanya terbaca pemilik dan asisten.
-- Token perangkat hanya terbaca pemiliknya; Cloud Functions membacanya lewat Admin SDK.
-- Service account, API key Maps, dan konfigurasi rahasia tidak masuk repo. `google-services.json` boleh di-commit (tidak memuat rahasia); API key Maps disuntikkan lewat env saat build.
+- Token perangkat terbaca pemiliknya dan asisten (untuk mengirim notifikasi); hanya pemilik yang dapat membuat atau mengubahnya.
+- Kunci akun layanan FCM hanya disimpan di kredensial EAS; tidak ada kunci peta. `google-services.json` boleh di-commit (tidak memuat rahasia). `.env` tetap tidak di-commit.
 
 ### 6.2 Ringkasan Akses per Koleksi (tambahan dan perubahan)
 
@@ -356,7 +357,7 @@ Tidak berubah dari v2.2 bagian 5.
 | `labs` | Semua pengguna login | Asisten, dengan validasi field (4.2) |
 | `sessions` | Tetap | Tambahan: `labId` wajib saat create dan merujuk lab yang ada; saat Dibuka, `changedOnly` kini `['topik', 'labId', 'endAt', 'updatedAt']` |
 | `attendances` | Tetap | Tambahan saat create: `labId` = `labId` sesi; bukti `lokasi` lengkap; `jarakM` ≤ `radiusM` lab; `akurasiM` ≤ 50; `mocked == false` |
-| `users/{uid}/devices` | Pemilik | Pemilik |
+| `users/{uid}/devices` | Pemilik; asisten | Buat/ubah: pemilik. Hapus: pemilik; asisten (token ditolak, FR-54) |
 
 ### 6.3 Sketsa Rules (tambahan pada sketsa v2.2)
 
@@ -389,7 +390,11 @@ match /labs/{labId} {
 //   && request.resource.data.lokasi.jarakM <= labOf(request.resource.data.labId).radiusM
 
 match /users/{uid}/devices/{deviceId} {
-  allow read, write: if signedIn() && request.auth.uid == uid;
+  allow read: if signedIn() && (request.auth.uid == uid || isAsisten());
+  allow create, update: if signedIn() && request.auth.uid == uid
+    && request.resource.data.keys().hasOnly(['token','platform','updatedAt'])
+    && request.resource.data.token is string;
+  allow delete: if signedIn() && (request.auth.uid == uid || isAsisten());
 }
 ```
 
@@ -399,7 +404,10 @@ Sketsa ini acuan logika. Rules final diuji di emulator sebelum di-deploy (6.5) d
 
 - **Bukti lokasi berasal dari perangkat.** Klien yang dimodifikasi atau perangkat yang di-root dapat mengirim koordinat palsu yang tidak terdeteksi sebagai `mocked`. Mitigasi: deteksi `mocked`, kode sesi, bukti lokasi tersimpan dan terlihat di rekap, serta pemeriksaan asisten. Validasi lokasi di server (mis. Play Integrity) masuk backlog.
 - **Jarak dihitung klien.** Rules hanya memeriksa konsistensi `jarakM` dengan radius, bukan menghitung ulang dari koordinat (rules tidak mendukung fungsi trigonometri).
-- **Notifikasi tidak dijamin terkirim** (perangkat mati, mode hemat baterai). Notifikasi bersifat pemberitahuan; sumber kebenaran tetap data di aplikasi.
+- **Notifikasi tidak dijamin terkirim** (perangkat mati, mode hemat baterai, aplikasi asisten tertutup tepat setelah menulis). Notifikasi bersifat pemberitahuan; sumber kebenaran tetap data di aplikasi.
+- **Token praktikan terbaca asisten.** Asisten yang memodifikasi aplikasinya dapat mengirim notifikasi sembarang ke praktikan. Diterima karena asisten adalah pihak tepercaya; pengirim di server terpisah (mis. Cloudflare Workers) masuk backlog.
+- **Perubahan lewat Firebase Console tidak memicu notifikasi**, karena pengirim berada di aplikasi asisten.
+- **OpenFreeMap disediakan apa adanya** dan dapat berubah atau berhenti; cadangan di bagian 14.
 
 ### 6.5 Pengujian Rules
 
@@ -409,7 +417,7 @@ Sembilan kasus v2.2 tetap, ditambah:
 11. Lab dengan radius di luar 10–200 atau koordinat tidak valid ditolak.
 12. Sesi baru tanpa `labId` atau dengan `labId` yang tidak ada ditolak.
 13. Presensi dengan `jarakM` > radius, `akurasiM` > 50, `mocked` = true, atau `labId` berbeda dari sesi ditolak; presensi dengan bukti valid berhasil.
-14. Pengguna tidak dapat membaca atau menulis `devices` milik pengguna lain.
+14. Praktikan tidak dapat membaca `devices` pengguna lain; asisten dapat membaca tetapi tidak dapat membuat atau mengubah `devices` milik pengguna lain.
 
 ## 7. Kebutuhan Non-Fungsional
 
@@ -418,10 +426,10 @@ NFR-01 s.d. NFR-12 dari v2.2 tetap berlaku, dengan catatan NFR-06 (web) mengikut
 | ID | Kebutuhan |
 | --- | --- |
 | NFR-13 Privasi lokasi | Lokasi hanya diambil saat layar presensi, peta, atau form lab terbuka (foreground). Watch posisi berhenti saat layar ditinggalkan. Posisi hanya dikirim ke server saat presensi berhasil. Tidak ada background location. |
-| NFR-14 Notifikasi | Notifikasi tiba ≤ 1 menit setelah peristiwa pada perangkat yang online dan mengizinkan notifikasi. |
+| NFR-14 Notifikasi | Notifikasi tiba ≤ 1 menit setelah aksi asisten berhasil, pada perangkat yang online dan mengizinkan notifikasi. |
 | NFR-15 Realtime lab | Perubahan sesi dan lab tercermin di peta dan panel info lab ≤ 3 detik (selaras NFR-08). |
 | NFR-16 Aksesibilitas peta | Status lokasi dan marker tidak dibedakan hanya dengan warna; tombol peta punya `aria-label`; info lab dan jarak juga tersedia sebagai teks di panel, sehingga peta tidak menjadi satu-satunya sumber informasi. |
-| NFR-17 Biaya | Budget alert aktif; API key Maps dibatasi `package` + SHA-1; tidak memakai API Google berbayar (Places, Directions, Geocoding); Function tidak melakukan polling. |
+| NFR-17 Biaya | Tidak ada layanan berbayar, langganan, atau kartu: Firebase Spark, Expo Push Service, OpenFreeMap. Atribusi OpenStreetMap tampil di peta. Tidak ada polling. |
 | NFR-18 Baterai | Watch posisi memakai akurasi seimbang dan interval wajar (mis. 5 detik / 5 meter) dan berhenti saat aplikasi ke latar belakang. |
 
 ## 8. Navigasi dan Interaksi
@@ -490,12 +498,11 @@ Dijalankan di dua HP Android (development build baru). Prasyarat: akun asisten (
 
 ## 10. Struktur File dan Kepemilikan (anti merge conflict)
 
-Elang (PM) tidak memiliki file kode fitur. **Ibrahim mengambil alih file yang pada v2.2 dimiliki Elang** (UI kit, tema, sisi asisten, `DESIGN.md`). Dhimas tetap pada fondasi data, auth, sisi praktikan yang sudah ada, dan kini juga server (Cloud Functions) dan konfigurasi native.
+Elang (PM) tidak memiliki file kode fitur. **Ibrahim mengambil alih file yang pada v2.2 dimiliki Elang** (UI kit, tema, sisi asisten, `DESIGN.md`). Dhimas tetap pada fondasi data, auth, sisi praktikan yang sudah ada, dan kini juga konfigurasi native serta pengirim notifikasi.
 
 ```
-app.json, eas.json, package.json, lockfile    DHIMAS   + plugin location/maps/notifications, package baru
-google-services.json                          DHIMAS   baru (FCM)
-functions/**                                  DHIMAS   baru: Cloud Functions N1–N5 + package.json sendiri
+app.json, eas.json, package.json, lockfile    DHIMAS   + plugin location/maplibre/notifications, package com.ppk01.rawuh
+google-services.json                          DHIMAS   baru (FCM, tanpa rahasia); kunci akun layanan FCM hanya di EAS
 firestore.rules, firestore.indexes.json       DHIMAS   + labs, devices, bukti lokasi
 src/
   app/
@@ -507,7 +514,7 @@ src/
     praktikan/** lainnya           DHIMAS   tetap
     asisten/**                     IBRAHIM  dari Elang; + lab/index, lab/form, peta
   constants/location.ts            DHIMAS   baru
-  services/                        DHIMAS   + labs, location, notifications; attendance diubah
+  services/                        DHIMAS   + labs, location, notifications, push; attendance diubah
   types/index.ts, store/**         DHIMAS   + lab, lokasi, notifikasi
   theme/**                         IBRAHIM  dari Elang
   components/**                    IBRAHIM  dari Elang; + LocationStatusCard, PermissionPrompt,
@@ -517,8 +524,8 @@ src/
   features/presensi/**             IBRAHIM  baru: daftar sesi hari ini, PresensiLokasiForm
   features/praktikan/**            DHIMAS   tetap; PraktikanTabBar + tombol aksi presensi
 docs/SRS.md, docs/arsip/**         ELANG (PM)
-docs/adr/**                        pembuat keputusan teknis (Dhimas untuk Functions/FCM/Maps)
-docs/README.md                     DHIMAS   + setup Blaze, FCM, Maps, Functions, emulator
+docs/adr/**                        pembuat keputusan teknis (Dhimas untuk notifikasi dan peta)
+docs/README.md                     DHIMAS   + setup FCM di EAS, MapLibre/OpenFreeMap, emulator
 DESIGN.md                          IBRAHIM  dari Elang; + pola lokasi, peta, izin perangkat
 ```
 
@@ -526,9 +533,9 @@ DESIGN.md                          IBRAHIM  dari Elang; + pola lokasi, peta, izi
 
 Aturan 1–8 v2.2 tetap berlaku, dengan pemilik baru di atas. Tambahan:
 
-9. **`react-native-maps` hanya di `features/lab/**`**, `expo-location` dan `expo-notifications` hanya di `services/`. Komponen `components/**` menerima data lokasi lewat props.
-10. **`functions/` di-deploy hanya oleh Dhimas** (`firebase deploy --only functions`), sama seperti rules.
-11. Perubahan `types` dan kontrak store untuk lab, lokasi, dan notifikasi diumumkan sebelum merge dan disetujui PM (P-03).
+9. **MapLibre hanya di `features/lab/**`**, `expo-location`, `expo-notifications`, dan Expo Push API hanya di `services/`. Komponen `components/**` menerima data lokasi lewat props.
+10. **Kredensial EAS dan kunci FCM dipegang Dhimas**; rules hanya di-deploy oleh Dhimas.
+11. Perubahan `types` dan kontrak store untuk lab, lokasi, dan notifikasi diumumkan sebelum merge dan disetujui PM (P-02).
 
 ### Dampak pada Kode Sprint 2
 
@@ -544,7 +551,7 @@ Aturan 1–8 v2.2 tetap berlaku, dengan pemilik baru di atas. Tambahan:
 
 ## 11. Pembagian Tugas dan Tahapan Pengerjaan
 
-Elang adalah Project Manager Sprint 3 dan tidak menulis kode fitur. Pengembangnya dua orang: **Dhimas** (fondasi native, data, lokasi, notifikasi, server) dan **Ibrahim** (UI kit, halaman presensi, sisi asisten, peta).
+Elang adalah Project Manager Sprint 3 dan tidak menulis kode fitur. Pengembangnya dua orang: **Dhimas** (fondasi native, data, lokasi, notifikasi) dan **Ibrahim** (UI kit, halaman presensi, sisi asisten, peta).
 
 **Batas pengerjaan: Senin.** Pengerjaan dilakukan **berurutan per tahap** (11.5), bukan paralel. Satu tahap dimulai setelah tahap sebelumnya selesai dan PR-nya di-merge. Di dalam tahap, tugas dikerjakan sesuai urutan nomornya; menunggu tugas rekan di tahap yang sama adalah bagian dari rencana.
 
@@ -552,37 +559,36 @@ Elang adalah Project Manager Sprint 3 dan tidak menulis kode fitur. Pengembangny
 
 | Orang | Peran | Bertanggung jawab atas | Tidak mengerjakan |
 | --- | --- | --- | --- |
-| Elang | Project Manager | Lingkup dan prioritas, SRS, issue, konfirmasi ke asisten praktikum, koordinasi Blaze dan identitas aplikasi, persetujuan PR kontrak, pemantauan urutan tahap, uji integrasi, sign-off demo, form awal dan akhir | Menulis kode fitur, mengedit file developer |
-| Dhimas | Developer: native + data + server | Konfigurasi dan rebuild, `types`, store, `services/`, Cloud Functions, rules, sisi praktikan yang sudah ada, README | `components/**`, `theme/`, `features/lab|presensi|asisten`, `asisten/**` |
-| Ibrahim | Developer: UI + presensi + asisten + peta | Komponen dan tema, halaman presensi, peta dan panel info lab, kelola lab, form sesi dengan lab, rekap, `DESIGN.md` | `services/`, `store/`, `types/`, rules, `functions/`, konfigurasi native |
+| Elang | Project Manager | Lingkup dan prioritas, SRS, issue, keputusan identitas aplikasi, persetujuan PR kontrak, pemantauan urutan tahap, uji integrasi, sign-off demo, form awal dan akhir | Menulis kode fitur, mengedit file developer |
+| Dhimas | Developer: native + data + notifikasi | Konfigurasi dan rebuild (akun EAS), `types`, store, `services/` (termasuk pengirim notifikasi), rules, sisi praktikan yang sudah ada, README | `components/**`, `theme/`, `features/lab|presensi|asisten`, `asisten/**` |
+| Ibrahim | Developer: UI + presensi + asisten + peta | Komponen dan tema, halaman presensi, peta MapLibre dan panel info lab, kelola lab, form sesi dengan lab, rekap, `DESIGN.md` | `services/`, `store/`, `types/`, rules, konfigurasi native |
 
 ### 11.2 Tugas Elang (PM)
 
 | ID | Tugas | Tahap | Hasil |
 | --- | --- | --- | --- |
-| P-01 | Mengonfirmasi ke asisten praktikum: notifikasi lewat Cloud Functions + FCM, peta Google, marker = posisi perangkat sendiri, QR sebagai Could | 0 | Konfirmasi dicatat di 1.5 |
-| P-02 | Memastikan **Blaze + budget alert** aktif (dilakukan Dhimas sebagai owner) dan menyepakati `package` baru | 0 | Billing aktif; nama `package` final |
-| P-03 | Menyetujui PR kontrak: D-02 dan setiap perubahan `types`, tanda tangan store/hook, struktur Firestore, rules, atau Functions | 2 dan seterusnya | PR kontrak disetujui |
-| P-04 | Menyusun daftar nama lab Informatika untuk data awal | 0 | Data awal lab |
-| P-05 | Membuat issue per tugas, memantau urutan tahap, memutuskan penundaan Should/Could | Sepanjang sprint | Papan tugas, catatan di SRS |
-| P-06 | Meninjau PR kontrak sebelum di-merge, memantau PR lain, dan menjaga aturan proses (bagian 12) | Sepanjang sprint | Riwayat PR rapi |
-| P-07 | Checklist uji dari bagian 9 dan 6.5; memimpin gladi; sign-off | 7–8 | Checklist, daftar bug, sign-off |
-| P-08 | Memperbarui `docs/SRS.md`, form awal dan form akhir | 0 dan 8 | SRS final, form terisi |
+| P-01 | Menetapkan identitas aplikasi: `package` **`com.ppk01.rawuh`** dan pemegang akun EAS (Dhimas) | 0 | Keputusan diumumkan ke tim |
+| P-02 | Menyetujui PR kontrak: D-02 dan setiap perubahan `types`, tanda tangan store/hook, struktur Firestore, atau rules | 2 dan seterusnya | PR kontrak disetujui |
+| P-03 | Menyusun daftar nama lab Informatika untuk data awal | 0 | Data awal lab |
+| P-04 | Membuat issue per tugas, memantau urutan tahap, memutuskan penundaan Should/Could | Sepanjang sprint | Papan tugas, catatan di SRS |
+| P-05 | Memantau PR dan menjaga aturan proses (bagian 12) | Sepanjang sprint | Riwayat PR rapi |
+| P-06 | Checklist uji dari bagian 9 dan 6.5; memimpin gladi; sign-off | 7–8 | Checklist, daftar bug, sign-off |
+| P-07 | Memperbarui `docs/SRS.md`, form awal dan form akhir | 0 dan 8 | SRS final, form terisi |
 
 ### 11.3 Tugas Dhimas
 
 | ID | Tugas | FR / NFR | File utama | Bergantung pada | Selesai bila |
 | --- | --- | --- | --- | --- | --- |
-| D-01 | **Konfigurasi native + rebuild**: `package` baru, `userInterfaceStyle: "light"`, patch Expo, `expo-location`, `react-native-maps`, `expo-notifications` + config plugin, daftarkan app Android di Firebase (`google-services.json`), aktifkan Maps SDK for Android, API key terbatas lewat env, rebuild dev build, bagikan APK | 1.4, NFR-17 | `app.json`, `eas.json`, `package.json`, `google-services.json` | P-02 | APK baru terpasang di HP semua anggota; peta kosong tampil; izin lokasi dan notifikasi bisa diminta |
+| D-01 | **Konfigurasi native + rebuild**: `package` `com.ppk01.rawuh`, `userInterfaceStyle: "light"`, patch Expo, `expo-location`, `@maplibre/maplibre-react-native`, `expo-notifications` + config plugin; daftarkan app Android di Firebase (`google-services.json`); unggah kunci akun layanan FCM V1 ke kredensial EAS; rebuild dev build, bagikan APK | 1.4, NFR-17 | `app.json`, `eas.json`, `package.json`, `google-services.json` | P-01 | APK baru terpasang di HP semua anggota; peta OpenFreeMap tampil; izin lokasi dan notifikasi bisa diminta; notifikasi uji dari Expo push tool diterima |
 | D-02 | Kontrak `types`, konstanta lokasi, tanda tangan store/hook (3.5) dengan implementasi sementara (data dummy lab, posisi dummy) | Bagian 3 | `types/`, `constants/location.ts`, `store/**` | D-01 | PR disetujui PM |
 | D-03 | Service dan store **lab** (listen, CRUD, cek dipakai, nama unik), `labId` di sesi, data awal lab, **rules `labs` dan perubahan rules `sessions`** (deploy) | FR-40, FR-43, FR-04, FR-18 (data), 6.3 | `services/labs.ts`, `services/sessions.ts`, `store/**`, `scripts/`, `firestore.rules` | D-02 | Lab tersinkron realtime; hapus lab dipakai ditolak; tulis lab diterima Firestore |
 | D-04 | Service dan store **lokasi**: izin, layanan mati, timeout, akurasi, `mocked`, buka pengaturan, aktifkan layanan, watch, `distanceM` | FR-35, FR-56–58, NFR-13, NFR-18 | `services/location.ts`, `store/**` | D-01, D-02 | Semua `LocationStatus` dapat dipicu dan teruji di HP |
 | D-05 | **Presensi berbasis lokasi** di store/service: pra-cek diperluas, bukti lokasi, pesan alasan; detail sesi praktikan diubah (tombol ke halaman presensi, nama lab); **rules `attendances` diperluas** (deploy) | FR-07, FR-34, FR-35, FR-38, FR-03, 6.3 | `services/attendance.ts`, `store/**`, `praktikan/sesi/[id]`, `features/praktikan/**`, `firestore.rules` | D-03, D-04 | Presensi berhasil di dalam radius, ditolak di luar radius |
 | D-06 | **Registrasi perangkat**: izin notifikasi, token, simpan/hapus di `devices`, handler notifikasi masuk dan diketuk di root layout; **rules `devices`** (deploy) | FR-50, FR-52, FR-53, FR-59, 6.3 | `services/notifications.ts`, `store/**`, `app/_layout.tsx`, `firestore.rules` | D-01 | Token tersimpan; notifikasi uji dari Console tampil dan navigasi benar |
-| D-07 | **Cloud Functions** N1–N4 (+ N5 Could), pembersihan token tidak valid, region sesuai Firestore, deploy | FR-51, FR-54, FR-55, NFR-14 | `functions/**` | D-06, P-02 | Tiga peristiwa demo memicu notifikasi ke penerima yang benar |
+| D-07 | **Pengirim notifikasi** N1–N4 (+ N5 Could): `services/push.ts` (Expo Push API), pemanggilan `notify` di aksi store setelah berhasil, penentuan penerima, penghapusan token yang ditolak | FR-51, FR-54, FR-55, NFR-14 | `services/push.ts`, `store/**` | D-06, D-03 | Peristiwa demo memicu notifikasi ke penerima yang benar dan hanya ke mereka |
 | D-08 | **Uji rules** 14 kasus (6.5) di emulator atau Rules Playground, catat hasil, perbaiki rules bila ada yang gagal | FR-31, 6.5 | `firestore.rules`, `docs/README.md` | D-03, D-05, D-06 | 14 kasus lulus dan tercatat |
 | D-09 | `PraktikanTabBar`: tab Peta + tombol aksi bulat ke halaman presensi dengan penanda sesi Dibuka; Profil pindah ke header Jadwal | 8 | `praktikan/(tabs)/_layout.tsx`, `features/praktikan/PraktikanTabBar`, `praktikan/(tabs)/jadwal` | I-03 | Navigasi praktikan sesuai bagian 8 |
-| D-10 | README: `docs/README.md` diubah dari panduan per orang menjadi panduan setup proyek (Firebase Blaze, FCM, Maps key, Functions, emulator, hasil uji rules, akun seed); bagian basi dibersihkan (`KeluarButton`, env AI, Expo Go, switch peran di README root) | n/a | `docs/README.md`, `README.md` | D-08 | Anggota baru dapat menjalankan proyek dari nol |
+| D-10 | README: `docs/README.md` diubah dari panduan per orang menjadi panduan setup proyek (FCM di EAS, MapLibre/OpenFreeMap, emulator, hasil uji rules, akun seed); bagian basi dibersihkan (`KeluarButton`, env AI, Expo Go, switch peran di README root) | n/a | `docs/README.md`, `README.md` | D-08 | Anggota baru dapat menjalankan proyek dari nol |
 
 Rules ditulis **bersama fitur yang membutuhkannya** (D-03, D-05, D-06) karena Firestore menolak semua tulis ke koleksi yang belum diatur (deny by default). D-08 menguji rules secara menyeluruh di akhir.
 
@@ -595,7 +601,7 @@ Rules ditulis **bersama fitur yang membutuhkannya** (D-03, D-05, D-06) karena Fi
 | I-03 | **Halaman presensi**: daftar sesi hari ini, info lokasi, form kode, sheet konfirmasi, pesan alasan | FR-32, FR-33, FR-36, FR-37 | `praktikan/presensi.tsx`, `features/presensi/**` | I-02, D-05 | Alur 1 langkah 3–7 lolos |
 | I-04 | **Kelola lab** (asisten): daftar, form dengan peta, "Pakai lokasi saya", geser marker, lingkaran radius, hapus dengan konfirmasi | FR-40, FR-41, FR-43 | `asisten/lab/**`, `features/lab/LabForm`, `labValidation.ts` | I-01, D-03 | Lab tersimpan dan tampil di peta |
 | I-05 | **Form sesi dengan pilihan lab** dan ubah lab saat Dibuka | FR-04, FR-18 | `asisten/buat`, `features/asisten/SessionForm`, `sessionFormValidation.ts` | I-04 | Sesi baru wajib lab; lab sesi bisa diubah |
-| I-06 | **Peta lab** (asisten dan praktikan): marker, posisi sendiri, "Ke posisiku", "Lihat semua lab", panel info lab realtime, pengganti web | FR-44, FR-46–48 | `features/lab/LabMap`, `LabMarker`, `praktikan/(tabs)/peta`, `asisten/peta` | D-09 | Alur 2 lolos |
+| I-06 | **Peta lab** (asisten dan praktikan) dengan MapLibre + OpenFreeMap dan atribusi OpenStreetMap: marker, posisi sendiri, "Ke posisiku", "Lihat semua lab", panel info lab realtime, pengganti web | FR-44, FR-46–48 | `features/lab/LabMap`, `LabMarker`, `praktikan/(tabs)/peta`, `asisten/peta` | D-09 | Alur 2 lolos |
 | I-07 | Beranda asisten: pintasan Lab dan Peta; rekap dengan jarak presensi (+ peta kecil, Could) | FR-39, FR-49 | `asisten/index`, `asisten/sesi/[id]`, `features/asisten/RekapList` | I-06 | Rekap menampilkan jarak |
 | I-08 | Memperbarui `DESIGN.md`: pola status lokasi, permission prompt, peta, panel info lab; merapikan sisa token | n/a | `DESIGN.md` | Tahap 7 | Panduan terdokumentasi |
 
@@ -605,7 +611,7 @@ Urutan wajib. Kolom **Urutan** dibaca dari kiri ke kanan; panah berarti tugas di
 
 | Tahap | Urutan | Selesai bila (gerbang ke tahap berikutnya) |
 | --- | --- | --- |
-| **0. Persiapan** | P-01 → P-02 → P-04 → P-08 (form awal) | Billing aktif, `package` disepakati, daftar lab tersedia |
+| **0. Persiapan** | P-01 → P-03 → P-07 (form awal) | `package` dan pemegang EAS diumumkan, daftar lab tersedia |
 | **1. Fondasi native** | D-01 | APK baru terpasang di HP semua anggota |
 | **2. Kontrak** | D-02 → I-01 | Kontrak data dan props komponen di-merge |
 | **3. Lab** | D-03 → I-04 → I-05 | Asisten dapat membuat lab dan sesi yang memakai lab |
@@ -613,7 +619,7 @@ Urutan wajib. Kolom **Urutan** dibaca dari kiri ke kanan; panah berarti tugas di
 | **5. Peta dan info lab** | I-06 → I-07 | Alur 2 lolos |
 | **6. Notifikasi** | D-06 → D-07 | Alur 3 lolos; Alur 1 lolos lengkap dengan notifikasi |
 | **7. Pengujian** | D-08 → gladi tiga alur di dua HP → skenario tepi → perbaikan bug oleh pemilik file | Semua Must lolos; daftar bug kosong atau tercatat sebagai Should/Could |
-| **8. Dokumen dan penutupan** | I-08 → D-10 → P-07 (sign-off) → P-08 (SRS final, form akhir) | **Senin** |
+| **8. Dokumen dan penutupan** | I-08 → D-10 → P-06 (sign-off) → P-07 (SRS final, form akhir) | **Senin** |
 
 Catatan urutan:
 
@@ -636,12 +642,12 @@ Catatan urutan:
 
 ## 12. Alur Git dan Konfigurasi
 
-- `main` diproteksi: semua perubahan **wajib lewat PR**, berlaku juga untuk admin, tanpa push langsung dan tanpa force push. **Approval tidak diwajibkan**: pemilik PR boleh me-merge sendiri setelah `npx tsc --noEmit` lolos dan fiturnya dites. Review rekan tetap dianjurkan, dan **wajib** (minimal komentar setuju dari PM) untuk PR kontrak: `types`, tanda tangan store/hook, struktur Firestore, rules, dan Functions. Proteksi tidak boleh dimatikan.
+- `main` diproteksi: semua perubahan **wajib lewat PR**, berlaku juga untuk admin, tanpa push langsung dan tanpa force push. **Approval tidak diwajibkan**: pemilik PR boleh me-merge sendiri setelah `npx tsc --noEmit` lolos dan fiturnya dites. Review rekan tetap dianjurkan, dan **wajib** (minimal komentar setuju dari PM) untuk PR kontrak: `types`, tanda tangan store/hook, struktur Firestore, dan rules. Proteksi tidak boleh dimatikan.
 - Branch otomatis dihapus setelah PR di-merge. PR bertumpuk tetap **draft** dan base-nya dipindah ke `main` sebelum di-merge.
 - Branch: `feat/dhimas-<topik>`, `feat/ibrahim-<topik>`, `chore/...`, `fix/...`. Satu tugas (D-xx/I-xx) = satu PR.
 - Commit **head-body**: `feat: ...` / `fix: ...` / `chore: ...` / `docs: ...` huruf kecil, **tanpa scope dalam kurung**, tanpa titik, body menjelaskan kenapa. Tanpa trailer `Co-Authored-By`.
 - Aturan AI agent v2.2 tetap (boleh commit dan push ke branch fitur sampai PR draft, atribusi dimatikan, tidak boleh push ke `main` atau merge).
-- **Rahasia:** `.env` tidak di-commit; API key Maps lewat env; service account Firebase tidak pernah masuk repo; `npm audit fix` tidak dijalankan tanpa PR khusus.
+- **Rahasia:** `.env` tidak di-commit; kunci akun layanan FCM hanya di EAS dan tidak pernah masuk repo atau chat grup; `npm audit fix` tidak dijalankan tanpa PR khusus.
 - **Development build:** Sprint 3 menambah native module dan mengganti `package`. Rebuild dilakukan Dhimas di D-01 dan APK dibagikan ke semua anggota; build lama tidak dipakai lagi.
 
 ## 13. Definition of Done
@@ -651,7 +657,7 @@ Catatan urutan:
 - Rules baru di-deploy; 14 kasus uji tercatat.
 - Skenario tepi bagian 9 tertangani.
 - Tidak ada `console.error`, tidak ada `any`, tidak ada warna langsung di luar `src/theme`, `npx tsc --noEmit` lolos.
-- Tidak ada rahasia di repo; budget alert aktif; API key Maps dibatasi.
+- Tidak ada rahasia di repo; tidak ada layanan berbayar atau kartu; atribusi peta tampil.
 - Semua perubahan lewat PR; PR kontrak disetujui PM; tidak ada push langsung ke `main`.
 - `docs/SRS.md`, `docs/README.md`, dan `DESIGN.md` diperbarui. PM memberi sign-off setelah gladi bersama.
 
@@ -659,15 +665,16 @@ Catatan urutan:
 
 | Risiko | Mitigasi |
 | --- | --- |
-| Akun billing tidak dapat dipasang (Blaze gagal) | Rencana cadangan: notifikasi dikirim dari aplikasi asisten lewat Expo Push Service (kelemahan keamanan dan keandalan dicatat di README); peta memakai MapLibre + tile OpenStreetMap dengan atribusi. PM memutuskan di Tahap 0, sebelum D-01 |
+| OpenFreeMap tidak tersedia saat demo | Uji peta sehari sebelum demo; bila mati, style sementara diganti tile raster OpenStreetMap dengan atribusi (pemakaian demo sangat kecil); fitur presensi dan info lab tetap berjalan karena tidak bergantung pada peta |
 | Rebuild (D-01) terlambat atau gagal | Tahap 1 adalah jalur kritis dan prioritas pertama Dhimas; selama menunggu, Ibrahim menyiapkan komponen di branch-nya dan mengecek tampilan lewat web |
 | GPS dalam ruangan tidak akurat | Radius 50 m, batas akurasi 50 m, lab demo diatur di ruang demo, tombol "Perbarui lokasi" |
 | Lokasi dipalsukan | Deteksi `mocked`, kode sesi, bukti lokasi di rekap, rules memvalidasi bukti; risiko sisa dicatat (6.4) |
-| Notifikasi lambat atau tidak muncul saat demo | Uji sehari sebelum demo; izin notifikasi dan pengecualian hemat baterai diperiksa; sumber kebenaran tetap data di aplikasi |
-| API key Maps disalahgunakan | Kunci dibatasi `package` + SHA-1, tidak di-commit, budget alert |
-| Beban Dhimas terlalu berat (native + data + server) | Tugas UI dipusatkan ke Ibrahim; uji emulator di D-08 boleh diganti Rules Playground dan FR-54/55 boleh digeser; PM memantau tiap tahap |
+| Notifikasi lambat atau tidak muncul saat demo | Uji sehari sebelum demo dengan Expo push tool; kunci FCM sudah ada di EAS; izin notifikasi dan pengecualian hemat baterai diperiksa; sumber kebenaran tetap data di aplikasi |
+| Token praktikan terbaca asisten | Diterima (asisten tepercaya); rules melarang asisten mengubah token; server pengirim terpisah masuk backlog (6.4) |
+| MapLibre gagal dipasang atau di-build | Cadangan: WebView + MapLibre GL JS + OpenFreeMap (tanpa modul peta native, juga berjalan di web); keputusan PM di Tahap 1 |
+| Beban Dhimas terlalu berat (native + data + notifikasi) | Tugas UI dipusatkan ke Ibrahim; uji emulator di D-08 boleh diganti Rules Playground dan FR-54/55 boleh digeser; PM memantau tiap tahap |
 | Peralihan kepemilikan file Elang ke Ibrahim | Elang menjelaskan struktur UI kit dan sisi asisten di Tahap 0; `DESIGN.md` menjadi acuan |
-| Konflik merge pada `types`, `store`, rules, Functions | Pemilik tunggal Dhimas; perubahan kontrak diumumkan dan disetujui PM |
+| Konflik merge pada `types`, `store`, rules | Pemilik tunggal Dhimas; perubahan kontrak diumumkan dan disetujui PM |
 | Sesi lama tanpa `labId` | Tampil "Lab belum diatur"; presensi ditolak `NO_LAB`; asisten dapat memilih lab lewat ubah sesi |
 
 ## 15. Riwayat Perubahan
@@ -678,3 +685,4 @@ Catatan urutan:
 | 2.0–2.2 | Sprint 2 (lihat SRS v2.2) |
 | 3.0 | **Sprint 3.** PM Elang; developer Dhimas dan Ibrahim; file milik Elang berpindah ke Ibrahim. Paket Blaze, Cloud Functions + FCM untuk notifikasi berbasis peristiwa (N1–N5), `expo-notifications`, `react-native-maps` (Google), `expo-location` foreground. Halaman presensi khusus, presensi berbasis lokasi dengan bukti lokasi, koleksi `labs` dan pengelolaannya, sesi merujuk `labId`, peta lab dengan posisi perangkat sendiri dan panel aktivitas lab, penanganan izin dan kondisi perangkat. Menambah FR-32 s.d. FR-59, NFR-13 s.d. NFR-18, 5 kasus uji rules, tiga alur demo, struktur file dan tugas P-/D-/I- baru, rencana cadangan bila billing gagal |
 | 3.1 | Pengerjaan diubah dari fase paralel bertanggal menjadi **tahapan berurutan** (11.5) dengan batas Senin; rules ditulis bersama fiturnya (D-03, D-05, D-06) dan D-08 menjadi uji rules menyeluruh; ketergantungan tugas disesuaikan dengan urutan tahap; approval PR tidak diwajibkan kecuali PR kontrak (bagian 12) |
+| 3.2 | Ketentuan biaya: seluruh layanan gratis tanpa kartu. Firebase tetap Spark; notifikasi lewat Expo Push Service dari aplikasi asisten (menggantikan Cloud Functions); peta MapLibre + OpenFreeMap (menggantikan Google Maps); kunci FCM hanya di EAS; rules `devices` dapat dibaca asisten. Keputusan final: `package` `com.ppk01.rawuh`, akun EAS dipegang Dhimas, kode sesi tetap, halaman presensi menampilkan sesi hari ini, Profil pindah ke header Jadwal, konfirmasi asprak dihapus (implementasi dibebaskan). Tugas PM dinomori ulang P-01 s.d. P-07 |
