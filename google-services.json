@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "530785331905",
+    "project_id": "rawuh-presensi",
+    "storage_bucket": "rawuh-presensi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:530785331905:android:f28cb0f8768f49c0f58240",
+        "android_client_info": {
+          "package_name": "com.ppk01.rawuh"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "530785331905-pafcpg0qqpmu54h00ts02i3fro9nems4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1EZs2sGnlFNLpBeNrtW8oITPlngDCjKw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "530785331905-pafcpg0qqpmu54h00ts02i3fro9nems4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

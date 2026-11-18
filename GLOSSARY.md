@@ -48,6 +48,34 @@ _Avoid_: Laporan absensi, rekapitulasi kehadiran
 Kunci rahasia pendaftaran akun dengan peran Asisten Laboratorium yang diverifikasi langsung oleh Firebase Security Rules.
 _Avoid_: Token registrasi, invite code publik
 
+**Laboratorium (Lab)**:
+Entitas lokasi fisik tempat pelaksanaan praktikum yang memiliki titik koordinat dan radius geofence valid untuk verifikasi kehadiran.
+_Avoid_: Ruang, ruangan, tempat, lokasi sesi
+
+**Titik Presensi**:
+Koordinat geografis (lintang/lat dan bujur/lng) pusat suatu laboratorium yang menjadi acuan perhitungan jarak presensi.
+_Avoid_: Posisi lab, koordinat GPS, titik kumpul
+
+**Radius Presensi**:
+Batas toleransi jarak geofence (dalam satuan meter) dari Titik Presensi laboratorium tempat presensi dinyatakan berada di dalam lokasi.
+_Avoid_: Jarak toleransi, radius lab, geofence area
+
+**Bukti Lokasi**:
+Rekaman metadata posisi geografis perangkat praktikan saat presensi (`lat, lng, akurasiM, jarakM, mocked`) yang disimpan di Firestore untuk audit dan verifikasi aturan keamanan.
+_Avoid_: GPS log, koordinat user, data lokasi
+
+**Status Lokasi**:
+Keadaan kesiapan layanan dan perizinan lokasi pada perangkat pengguna (`idle`, `checking`, `ready`, `permission_denied`, `permission_blocked`, `services_off`, `low_accuracy`, `mocked`, `timeout`, `unavailable`).
+_Avoid_: GPS status, status izin, kondisi lokasi
+
+**Token Perangkat (Device Token)**:
+String pengenal unik perangkat (Expo Push Token) yang disimpan di subkoleksi `devices` pengguna untuk keperluan pengiriman notifikasi push melalui Expo Push Service dan FCM.
+_Avoid_: Token presensi, device id, FCM id
+
+**Notifikasi Push (Pemberitahuan Peristiwa)**:
+Pesan pemberitahuan sistem yang dikirimkan ke perangkat pengguna saat terjadi peristiwa penting (sesi dibuka, jadwal baru, status izin, atau perubahan lokasi praktikum).
+_Avoid_: Broadcast, alert, popup, notifikasi lokal
+
 ---
 
 # Tooling & Runtime Environment
