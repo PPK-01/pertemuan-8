@@ -1,3 +1,5 @@
+> Diarsipkan. Versi terbaru: [docs/SRS.md](../SRS.md).
+
 # SRS & Rencana Kerja: Aplikasi Presensi Praktikum (React Native)
 
 PM: Dhimas · Tim: Ibrahim, Elang · Sprint: 1 · Versi 1.3
