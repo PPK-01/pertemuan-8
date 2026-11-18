@@ -14,7 +14,7 @@ Dokumen ini merangkum panduan konfigurasi, arsitektur, dan pengujian untuk lingk
 6. **D-07**: Layanan Sesi & Kelas (`services/sessions.ts`, `services/kelas.ts`) dengan pemisahan kode 4 digit ke subdokumen `private/code`.
 7. **D-08**: Alur Presensi Praktikan: validasi kode sesi, pra-cek offline/sesi/kelas/duplikasi, rekaman waktu server, dan tab Riwayat dengan ringkasan kehadiran & izin.
 8. **D-09**: Fitur Pengajuan Izin Praktikan: validasi alasan (10–500 karakter), penyimpanan `izin/{sessionId}_{uid}`, tab Izin, dan layar detail izin.
-9. **D-10**: Integrasi AI (`services/ai.ts`): klasifikasi alasan izin menggunakan Model Sentimen EDOM lokal (*on-device inference* murni JavaScript) dengan backup HTTP API di `services/ai.http-backup.ts` (lihat [docs/AI_SETUP_BACKUP.md](AI_SETUP_BACKUP.md)).
+9. **D-10**: Integrasi AI (`services/ai.ts`): klasifikasi alasan izin menggunakan Model Sentimen EDOM lokal (*on-device inference* murni JavaScript).
 10. **D-11**: Logika rekapitulasi `computeRekap` yang memperhitungkan izin disetujui (FR-10, FR-28).
 11. **D-12**: Dokumentasi teknis proyek.
 
