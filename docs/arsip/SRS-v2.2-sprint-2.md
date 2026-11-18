@@ -1,3 +1,5 @@
+> Diarsipkan. Versi terbaru: [docs/SRS.md](../SRS.md).
+
 # SRS & Rencana Kerja Sprint 2: Aplikasi Presensi Praktikum "Rawuh" (React Native + Firebase)
 
 PM: Ibrahim · Tim: Dhimas, Elang · Sprint: 2 · Versi 2.2 (lanjutan SRS v1.3)
