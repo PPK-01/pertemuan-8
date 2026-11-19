@@ -15,6 +15,7 @@ import { mapFirebaseError } from './errors';
 import { dummySessionCodes, dummySessions } from '@/data/dummy';
 import type { CreateSessionInput, Result, Session, User } from '@/types';
 import { createId, createSessionCode } from '@/utils/id';
+import { getInMemoryLabs } from './labs';
 
 let inMemorySessions: Session[] = [...dummySessions];
 let inMemoryCodes: Record<string, string> = { ...dummySessionCodes };
@@ -106,11 +107,29 @@ export function listenSessions(
 export async function createSession(
   input: CreateSessionInput & { id?: string },
 ): Promise<Result<Session>> {
+  // FR-04: Sesi baru wajib punya lab
+  if (!input.labId) {
+    return {
+      ok: false,
+      code: 'INVALID_INPUT',
+      message: 'Sesi baru wajib memilih lab.',
+    };
+  }
+
   // C-2: Sesi dibuat dengan id final Firestore yang konsisten sejak awal
   const sessionId = input.id ?? createId('ses');
   const code = createSessionCode();
 
   if (!isFirebaseReady || !db) {
+    const labExists = getInMemoryLabs().some((l) => l.id === input.labId);
+    if (!labExists) {
+      return {
+        ok: false,
+        code: 'NOT_FOUND',
+        message: 'Lab yang dipilih tidak ditemukan.',
+      };
+    }
+
     const existing = inMemorySessions.find((s) => s.id === sessionId);
     if (existing) {
       return { ok: true, data: existing };
@@ -120,8 +139,8 @@ export async function createSession(
       praktikum: input.praktikum,
       kelas: input.kelas,
       topik: input.topik,
-      ruang: input.ruang ?? '',
-      ...(input.labId ? { labId: input.labId } : {}),
+      ruang: '',
+      labId: input.labId,
       startAt: input.startAt,
       endAt: input.endAt,
       status: 'scheduled',
@@ -148,13 +167,21 @@ export async function createSession(
       }
     }
 
+    const labSnap = await getDoc(doc(db, 'labs', input.labId));
+    if (!labSnap.exists()) {
+      return {
+        ok: false,
+        code: 'NOT_FOUND',
+        message: 'Lab yang dipilih tidak ditemukan.',
+      };
+    }
+
     const batch = writeBatch(db);
     batch.set(sessionRef, {
       praktikum: input.praktikum,
       kelas: input.kelas,
       topik: input.topik,
-      ruang: input.ruang ?? '',
-      ...(input.labId ? { labId: input.labId } : {}),
+      labId: input.labId,
       startAt: input.startAt,
       endAt: input.endAt,
       createdBy: input.createdBy,
@@ -186,8 +213,8 @@ export async function createSession(
       praktikum: input.praktikum,
       kelas: input.kelas,
       topik: input.topik,
-      ruang: input.ruang ?? '',
-      ...(input.labId ? { labId: input.labId } : {}),
+      ruang: '',
+      labId: input.labId,
       startAt: input.startAt,
       endAt: input.endAt,
       createdBy: input.createdBy,
@@ -204,6 +231,20 @@ export async function updateSession(
   id: string,
   patch: Partial<Session>,
 ): Promise<Result> {
+  if (patch.labId !== undefined) {
+    if (!isFirebaseReady || !db) {
+      const labExists = getInMemoryLabs().some((l) => l.id === patch.labId);
+      if (!labExists) {
+        return { ok: false, code: 'NOT_FOUND', message: 'Lab yang dipilih tidak ditemukan.' };
+      }
+    } else {
+      const labSnap = await getDoc(doc(db, 'labs', patch.labId));
+      if (!labSnap.exists()) {
+        return { ok: false, code: 'NOT_FOUND', message: 'Lab yang dipilih tidak ditemukan.' };
+      }
+    }
+  }
+
   if (!isFirebaseReady || !db) {
     inMemorySessions = inMemorySessions.map((s) => {
       if (s.id !== id) return s;
@@ -215,7 +256,6 @@ export async function updateSession(
 
   try {
     const sessionRef = doc(db, 'sessions', id);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _id, ...cleanPatch } = patch;
     const batch = writeBatch(db);
     batch.update(sessionRef, {

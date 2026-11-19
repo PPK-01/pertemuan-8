@@ -3,6 +3,7 @@ import { listenSessions } from '@/services/sessions';
 import { listenAttendances } from '@/services/attendance';
 import { listenIzin } from '@/services/izin';
 import { listenPraktikan } from '@/services/users';
+import { listenLabs } from '@/services/labs';
 import type { Attendance, Izin, KelasPraktikum, Lab, Session, User } from '@/types';
 
 export type SyncKey = 'sessions' | 'kelas' | 'attendances' | 'izin' | 'users' | 'labs';
@@ -136,8 +137,16 @@ function startListener(key: SyncKey, user: User, delegate: SyncStoreDelegate) {
     }
 
     case 'labs': {
-      // Implementasi sementara D-02; listener Firestore penuh diimplementasikan pada D-03
-      delegate.setSyncStatus('labs', 'ready');
+      const unsub = listenLabs(
+        (labs) => {
+          delegate.setLabs(labs);
+          delegate.setSyncStatus('labs', 'ready');
+        },
+        () => {
+          delegate.setSyncStatus('labs', 'error');
+        },
+      );
+      activeUnsubscribers.labs = unsub;
       break;
     }
   }
@@ -168,7 +177,7 @@ export function stopSync(delegate?: SyncStoreDelegate): void {
 
   const activeDelegate = delegate ?? currentDelegateRef;
   if (activeDelegate) {
-    const keys: SyncKey[] = ['kelas', 'sessions', 'attendances', 'izin', 'users'];
+    const keys: SyncKey[] = ['kelas', 'sessions', 'attendances', 'izin', 'users', 'labs'];
     for (const k of keys) {
       activeDelegate.setSyncStatus(k, 'idle');
     }
@@ -191,7 +200,7 @@ export function retrySync(
   if (key) {
     startListener(key, activeUser, activeDelegate);
   } else {
-    const keys: SyncKey[] = ['kelas', 'sessions', 'attendances', 'izin', 'users'];
+    const keys: SyncKey[] = ['kelas', 'sessions', 'attendances', 'izin', 'users', 'labs'];
     for (const k of keys) {
       if (activeDelegate.getSyncStatus(k) === 'error') {
         startListener(k, activeUser, activeDelegate);

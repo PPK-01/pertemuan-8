@@ -21,6 +21,11 @@ import {
   updateKelas as svcUpdateKelas,
 } from '@/services/kelas';
 import {
+  addLab as svcAddLab,
+  updateLab as svcUpdateLab,
+  deleteLab as svcDeleteLab,
+} from '@/services/labs';
+import {
   createSession as svcCreateSession,
   deleteSession as svcDeleteSession,
   getSessionCode as svcGetSessionCode,
@@ -361,42 +366,22 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
   addLab: async (input) => {
     const user = get().currentUser;
-    const now = new Date().toISOString();
-    const newLab: Lab = {
-      id: `lab-${Date.now()}`,
-      nama: input.nama,
-      gedung: input.gedung,
-      lat: input.lat,
-      lng: input.lng,
-      radiusM: input.radiusM,
-      createdBy: user?.id ?? 'usr-asisten-1',
-      createdAt: now,
-      updatedBy: user?.id ?? 'usr-asisten-1',
-      updatedAt: now,
-    };
-    set((state) => ({ labs: [...state.labs, newLab] }));
-    return { ok: true, data: newLab };
+    if (!user) {
+      return { ok: false, code: 'PERMISSION_DENIED', message: 'Hanya asisten yang dapat menambah lab.' };
+    }
+    return withWriteGuard(() => svcAddLab(input, user));
   },
 
   updateLab: async (id, patch) => {
-    const now = new Date().toISOString();
     const user = get().currentUser;
-    set((state) => ({
-      labs: state.labs.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              ...patch,
-              updatedBy: user?.id ?? l.updatedBy,
-              updatedAt: now,
-            }
-          : l,
-      ),
-    }));
-    return { ok: true, data: undefined };
+    if (!user) {
+      return { ok: false, code: 'PERMISSION_DENIED', message: 'Hanya asisten yang dapat mengubah lab.' };
+    }
+    return withWriteGuard(() => svcUpdateLab(id, patch, user));
   },
 
   deleteLab: async (id) => {
+    // Pra-cek di store sesi yang masih memakai lab dan belum ditutup (FR-43)
     const activeSession = get().sessions.find(
       (s) => s.labId === id && s.status !== 'closed',
     );
@@ -407,10 +392,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         message: 'Lab ini masih dipakai sesi yang belum ditutup.',
       };
     }
-    set((state) => ({
-      labs: state.labs.filter((l) => l.id !== id),
-    }));
-    return { ok: true, data: undefined };
+    return withWriteGuard(() => svcDeleteLab(id, get().sessions));
   },
 
   requestLocation: async () => {
