@@ -1,4 +1,11 @@
-import type { Attendance, Izin, KelasPraktikum, Session, User } from '@/types';
+import type {
+  Attendance,
+  Izin,
+  KelasPraktikum,
+  Lab,
+  Session,
+  User,
+} from '@/types';
 
 export const dummyUsers: User[] = [
   { id: 'usr-asisten-1', name: 'Dina Pratiwi', email: 'dina@rawuh.ac.id', role: 'asisten' },
@@ -18,6 +25,69 @@ export const dummyKelasPraktikum: KelasPraktikum[] = [
   { id: 'kp-4', praktikum: 'Pemrograman Mobile', kelas: 'B', createdBy: 'usr-asisten-2' },
 ];
 
+export const dummyLabs: Lab[] = [
+  {
+    id: 'lab-1',
+    nama: 'Lab Pemrograman Dasar',
+    gedung: 'Gedung A, lantai 1',
+    lat: -7.770123,
+    lng: 110.370123,
+    radiusM: 50,
+    createdBy: 'usr-asisten-1',
+    createdAt: '2026-11-18T00:00:00.000Z',
+    updatedBy: 'usr-asisten-1',
+    updatedAt: '2026-11-18T00:00:00.000Z',
+  },
+  {
+    id: 'lab-2',
+    nama: 'Lab Rekayasa Perangkat Lunak',
+    gedung: 'Gedung A, lantai 2',
+    lat: -7.770456,
+    lng: 110.370456,
+    radiusM: 50,
+    createdBy: 'usr-asisten-1',
+    createdAt: '2026-11-18T00:00:00.000Z',
+    updatedBy: 'usr-asisten-1',
+    updatedAt: '2026-11-18T00:00:00.000Z',
+  },
+  {
+    id: 'lab-3',
+    nama: 'Lab Basis Data',
+    gedung: 'Gedung A, lantai 2',
+    lat: -7.770789,
+    lng: 110.370789,
+    radiusM: 50,
+    createdBy: 'usr-asisten-1',
+    createdAt: '2026-11-18T00:00:00.000Z',
+    updatedBy: 'usr-asisten-1',
+    updatedAt: '2026-11-18T00:00:00.000Z',
+  },
+  {
+    id: 'lab-4',
+    nama: 'Lab Jaringan Komputer',
+    gedung: 'Gedung B, lantai 1',
+    lat: -7.771112,
+    lng: 110.371112,
+    radiusM: 50,
+    createdBy: 'usr-asisten-2',
+    createdAt: '2026-11-18T00:00:00.000Z',
+    updatedBy: 'usr-asisten-2',
+    updatedAt: '2026-11-18T00:00:00.000Z',
+  },
+  {
+    id: 'lab-5',
+    nama: 'Lab Kecerdasan Buatan',
+    gedung: 'Gedung B, lantai 3',
+    lat: -7.775,
+    lng: 110.375,
+    radiusM: 50,
+    createdBy: 'usr-asisten-2',
+    createdAt: '2026-11-18T00:00:00.000Z',
+    updatedBy: 'usr-asisten-2',
+    updatedAt: '2026-11-18T00:00:00.000Z',
+  },
+];
+
 export const dummySessions: Session[] = [
   {
     id: 'ses-1',
@@ -25,6 +95,7 @@ export const dummySessions: Session[] = [
     kelas: 'A',
     topik: 'Normalisasi dan ERD',
     ruang: 'Lab Komputer 1',
+    labId: 'lab-1',
     startAt: '2026-11-12T08:00:00.000Z',
     endAt: '2026-11-12T10:00:00.000Z',
     status: 'open',
@@ -37,6 +108,7 @@ export const dummySessions: Session[] = [
     kelas: 'A',
     topik: 'React Native Navigation & State',
     ruang: 'Lab Komputer 3',
+    labId: 'lab-2',
     startAt: '2026-11-13T13:00:00.000Z',
     endAt: '2026-11-13T15:00:00.000Z',
     status: 'scheduled',
@@ -48,6 +120,7 @@ export const dummySessions: Session[] = [
     kelas: 'B',
     topik: 'Query SQL Lanjutan & Subquery',
     ruang: 'Lab Komputer 1',
+    labId: 'lab-3',
     startAt: '2026-11-11T08:00:00.000Z',
     endAt: '2026-11-11T10:00:00.000Z',
     status: 'closed',

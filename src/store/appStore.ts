@@ -5,6 +5,7 @@ import {
   dummyAttendances,
   dummyIzin,
   dummyKelasPraktikum,
+  dummyLabs,
   dummySessions,
   dummyUsers,
 } from '@/data/dummy';
@@ -48,15 +49,20 @@ import {
 import type {
   Attendance,
   AttendResult,
+  CreateLabInput,
   CreateSessionInput,
+  DevicePosition,
   Izin,
   IzinStatus,
   KelasPraktikum,
+  Lab,
+  LocationStatus,
+  NotificationPermission,
   RegisterInput,
   Rekap,
   Result,
-  Role,
   Session,
+  UpdateLabInput,
   User,
 } from '@/types';
 
@@ -68,6 +74,7 @@ const IDLE_SYNC: Record<SyncKey, SyncStatus> = {
   attendances: 'idle',
   izin: 'idle',
   users: 'idle',
+  labs: 'idle',
 };
 
 export type AppStoreState = {
@@ -83,11 +90,20 @@ export type AppStoreState = {
   izinList: Izin[];
   sessionCodes: Record<string, string>;
 
+  // Lab & Lokasi (Sprint 3 §3.5)
+  labs: Lab[];
+  location: { status: LocationStatus; position: DevicePosition | null };
+  notifPermission: NotificationPermission;
+
   // Internal setters
   setCurrentUser: (user: User | null) => void;
   setAuthStatus: (status: 'loading' | 'signedOut' | 'signedIn') => void;
   setSyncStatus: (key: SyncKey, status: SyncStatus) => void;
   setSessionCode: (sessionId: string, code: string) => void;
+  setLabs: (labs: Lab[]) => void;
+  setLocationStatus: (status: LocationStatus) => void;
+  setDevicePosition: (position: DevicePosition | null) => void;
+  setNotifPermission: (perm: NotificationPermission) => void;
 
   // Aksi Auth (FR-01, FR-13 s.d. FR-15)
   initAuth: () => () => void;
@@ -122,6 +138,18 @@ export type AppStoreState = {
   updateKelas: (id: string, praktikum: string, kelas: string) => Promise<Result>;
   deleteKelas: (id: string) => Promise<Result>;
 
+  // Aksi Lab (FR-40, FR-41, FR-43)
+  addLab: (input: CreateLabInput) => Promise<Result<Lab>>;
+  updateLab: (id: string, patch: UpdateLabInput) => Promise<Result>;
+  deleteLab: (id: string) => Promise<Result>;
+
+  // Aksi Lokasi & Perangkat (FR-35, FR-50, FR-56–58)
+  requestLocation: () => Promise<LocationStatus>;
+  refreshLocation: () => Promise<LocationStatus>;
+  openLocationSettings: () => Promise<void>;
+  enableLocationServices: () => Promise<LocationStatus>;
+  registerDevice: () => Promise<void>;
+
   // Aksi Presensi & Izin (FR-07, FR-21 s.d. FR-24, FR-26)
   submitAttendance: (sessionId: string, code: string) => Promise<AttendResult>;
   submitIzin: (sessionId: string, alasan: string) => Promise<Result<Izin>>;
@@ -145,6 +173,7 @@ function getSyncDelegate(get: () => AppStoreState, set: (partial: Partial<AppSto
     setAttendances: (attendances) => set({ attendances }),
     setIzinList: (izinList) => set({ izinList }),
     setUsers: (users) => set({ users }),
+    setLabs: (labs) => set({ labs }),
     retryAi: (izinId) => get().retryAi(izinId),
   };
 }
@@ -162,6 +191,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   attendances: isFirebaseReady ? [] : dummyAttendances,
   izinList: isFirebaseReady ? [] : dummyIzin,
   sessionCodes: {},
+
+  // Lab & Lokasi
+  labs: isFirebaseReady ? [] : dummyLabs,
+  location: {
+    status: 'idle',
+    position: null,
+  },
+  notifPermission: 'undetermined',
 
   setCurrentUser: (user) => {
     set({
@@ -182,6 +219,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         attendances: isFirebaseReady ? [] : dummyAttendances,
         izinList: isFirebaseReady ? [] : dummyIzin,
         sessionCodes: {},
+        labs: isFirebaseReady ? [] : dummyLabs,
+        location: { status: 'idle', position: null },
       });
     }
   },
@@ -199,6 +238,16 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       sessionCodes: { ...state.sessionCodes, [sessionId]: code },
     }));
   },
+
+  setLabs: (labs) => set({ labs }),
+
+  setLocationStatus: (status) =>
+    set((state) => ({ location: { ...state.location, status } })),
+
+  setDevicePosition: (position) =>
+    set((state) => ({ location: { ...state.location, position } })),
+
+  setNotifPermission: (notifPermission) => set({ notifPermission }),
 
   initAuth: () => {
     return authObserveAuth((user) => {
@@ -310,6 +359,91 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     return withWriteGuard(() => svcDeleteKelas(id));
   },
 
+  addLab: async (input) => {
+    const user = get().currentUser;
+    const now = new Date().toISOString();
+    const newLab: Lab = {
+      id: `lab-${Date.now()}`,
+      nama: input.nama,
+      gedung: input.gedung,
+      lat: input.lat,
+      lng: input.lng,
+      radiusM: input.radiusM,
+      createdBy: user?.id ?? 'usr-asisten-1',
+      createdAt: now,
+      updatedBy: user?.id ?? 'usr-asisten-1',
+      updatedAt: now,
+    };
+    set((state) => ({ labs: [...state.labs, newLab] }));
+    return { ok: true, data: newLab };
+  },
+
+  updateLab: async (id, patch) => {
+    const now = new Date().toISOString();
+    const user = get().currentUser;
+    set((state) => ({
+      labs: state.labs.map((l) =>
+        l.id === id
+          ? {
+              ...l,
+              ...patch,
+              updatedBy: user?.id ?? l.updatedBy,
+              updatedAt: now,
+            }
+          : l,
+      ),
+    }));
+    return { ok: true, data: undefined };
+  },
+
+  deleteLab: async (id) => {
+    const activeSession = get().sessions.find(
+      (s) => s.labId === id && s.status !== 'closed',
+    );
+    if (activeSession) {
+      return {
+        ok: false,
+        code: 'IN_USE',
+        message: 'Lab ini masih dipakai sesi yang belum ditutup.',
+      };
+    }
+    set((state) => ({
+      labs: state.labs.filter((l) => l.id !== id),
+    }));
+    return { ok: true, data: undefined };
+  },
+
+  requestLocation: async () => {
+    const dummyPos: DevicePosition = {
+      lat: -7.770123,
+      lng: 110.370123,
+      akurasiM: 10,
+      mocked: false,
+      at: new Date().toISOString(),
+    };
+    set({
+      location: {
+        status: 'ready',
+        position: dummyPos,
+      },
+    });
+    return 'ready';
+  },
+
+  refreshLocation: async () => {
+    return get().requestLocation();
+  },
+
+  openLocationSettings: async () => {},
+
+  enableLocationServices: async () => {
+    return get().requestLocation();
+  },
+
+  registerDevice: async () => {
+    set({ notifPermission: 'granted' });
+  },
+
   submitAttendance: async (sessionId, code) => {
     const user = get().currentUser;
     if (!user) {
@@ -390,7 +524,7 @@ connectionService.subscribe((isConnected) => {
   }
 });
 
-// ===== Fungsi Murni Rekapitulasi (FR-10, FR-28) =====
+// ===== Fungsi Murni Rekapitulasi (FR-10, FR-28, FR-39) =====
 
 export function computeRekap(
   session: Session,
@@ -414,7 +548,7 @@ export function computeRekap(
   const hadir = praktikan
     .flatMap((user) => {
       const att = attendanceByUser.get(user.id);
-      return att ? [{ user, timestamp: att.timestamp }] : [];
+      return att ? [{ user, timestamp: att.timestamp, lokasi: att.lokasi }] : [];
     })
     .sort((a, b) => (a.timestamp ?? '').localeCompare(b.timestamp ?? ''));
 
@@ -475,7 +609,10 @@ export function useKelasList(): KelasPraktikum[] {
 export function useSessionsForUser(userId: string): Session[] {
   return useAppStore(
     useShallow((state) => {
-      const user = state.currentUser?.id === userId ? state.currentUser : state.users.find((u) => u.id === userId);
+      const user =
+        state.currentUser?.id === userId
+          ? state.currentUser
+          : state.users.find((u) => u.id === userId);
       if (!user) return [];
 
       const visible =
@@ -559,7 +696,9 @@ export function useSessionCode(sessionId?: string): SessionCodeState {
 
 export function useAttendanceBySession(sessionId: string): Attendance[] {
   return useAppStore(
-    useShallow((state) => state.attendances.filter((a) => a.sessionId === sessionId)),
+    useShallow((state) =>
+      state.attendances.filter((a) => a.sessionId === sessionId),
+    ),
   );
 }
 
@@ -571,7 +710,9 @@ export function useAttendanceByUser(userId: string): Attendance[] {
 
 export function useHasAttended(sessionId: string, userId: string): boolean {
   return useAppStore((state) =>
-    state.attendances.some((a) => a.sessionId === sessionId && a.userId === userId),
+    state.attendances.some(
+      (a) => a.sessionId === sessionId && a.userId === userId,
+    ),
   );
 }
 
@@ -615,12 +756,16 @@ export function useIzinBySession(sessionId: string): Izin[] {
  * Hook membaca daftar izin asisten (C-7, FR-25).
  * Mendukung filter spesifik status, 'all', atau 'pending' ('pending_ai' + 'pending_review').
  */
-export function useIzinForAsisten(filter?: IzinStatus | 'all' | 'pending'): Izin[] {
+export function useIzinForAsisten(
+  filter?: IzinStatus | 'all' | 'pending',
+): Izin[] {
   return useAppStore(
     useShallow((state) => {
       let list = state.izinList;
       if (filter === 'pending') {
-        list = list.filter((i) => i.status === 'pending_ai' || i.status === 'pending_review');
+        list = list.filter(
+          (i) => i.status === 'pending_ai' || i.status === 'pending_review',
+        );
       } else if (filter && filter !== 'all') {
         list = list.filter((i) => i.status === filter);
       }
@@ -632,4 +777,175 @@ export function useIzinForAsisten(filter?: IzinStatus | 'all' | 'pending'): Izin
 export async function fetchSessionCode(sessionId: string): Promise<string | null> {
   const res = await svcGetSessionCode(sessionId);
   return res.ok ? res.data : null;
+}
+
+// ===== Hook Lab & Lokasi (Sprint 3 §3.5) =====
+
+export function useLabs(): Lab[] {
+  return useAppStore((state) => state.labs);
+}
+
+export function useLabById(id: string | undefined): Lab | null {
+  return useAppStore((state) =>
+    id ? state.labs.find((l) => l.id === id) ?? null : null,
+  );
+}
+
+export function useLabForSession(sessionId: string | undefined): Lab | null {
+  return useAppStore((state) => {
+    if (!sessionId) return null;
+    const session = state.sessions.find((s) => s.id === sessionId);
+    if (!session || !session.labId) return null;
+    return state.labs.find((l) => l.id === session.labId) ?? null;
+  });
+}
+
+/**
+ * Hook membaca aktivitas sesi pada suatu laboratorium (FR-46, FR-47).
+ * Menggunakan selector terpisah dan useMemo untuk kestabilan referensi di Zustand v5.
+ */
+export function useLabActivity(labId: string | undefined): {
+  berlangsung: Session[];
+  berikutnya: Session[];
+} {
+  const sessions = useAppStore((state) => state.sessions);
+  const currentUser = useAppStore((state) => state.currentUser);
+
+  return useMemo(() => {
+    if (!labId) return { berlangsung: [], berikutnya: [] };
+    const now = new Date().toISOString();
+
+    let labSessions = sessions.filter((s) => s.labId === labId);
+    if (currentUser && currentUser.role === 'praktikan') {
+      labSessions = labSessions.filter((s) => s.kelas === currentUser.kelas);
+    }
+
+    const berlangsung = labSessions.filter(
+      (s) =>
+        s.status === 'open' ||
+        (s.status === 'scheduled' && now >= s.startAt && now <= s.endAt),
+    );
+
+    const berikutnya = labSessions
+      .filter((s) => s.status === 'scheduled' && s.startAt > now)
+      .sort((a, b) => a.startAt.localeCompare(b.startAt));
+
+    return { berlangsung, berikutnya };
+  }, [labId, sessions, currentUser]);
+}
+
+export function useLocation(): {
+  status: LocationStatus;
+  position: DevicePosition | null;
+} {
+  return useAppStore(useShallow((state) => state.location));
+}
+
+function calculateDistanceM(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
+/**
+ * Hook menghitung jarak perangkat ke laboratorium (FR-36).
+ * Menggunakan useMemo agar objek hasil stabil dan tidak memicu re-render.
+ */
+export function useDistanceToLab(
+  labId: string | undefined,
+): { jarakM: number; didalamRadius: boolean } | null {
+  const labs = useAppStore((state) => state.labs);
+  const position = useAppStore((state) => state.location.position);
+
+  return useMemo(() => {
+    if (!labId || !position) return null;
+    const lab = labs.find((l) => l.id === labId);
+    if (!lab) return null;
+
+    const jarakM = calculateDistanceM(
+      position.lat,
+      position.lng,
+      lab.lat,
+      lab.lng,
+    );
+
+    return {
+      jarakM,
+      didalamRadius: jarakM <= lab.radiusM,
+    };
+  }, [labId, labs, position]);
+}
+
+export function useWatchPosition(enabled: boolean): void {
+  const requestLocation = useAppStore((state) => state.requestLocation);
+
+  useEffect(() => {
+    if (!enabled) return;
+    void requestLocation();
+  }, [enabled, requestLocation]);
+}
+
+/**
+ * Hook membaca daftar sesi praktikan hari ini dan status presensinya (FR-32, FR-33).
+ * Menggunakan selector terpisah dan useMemo untuk mencegah infinite re-render.
+ */
+export function useTodaySessionsForAttendance(): {
+  session: Session;
+  attendance: Attendance | null;
+  izin: Izin | null;
+  canAttend: boolean;
+}[] {
+  const sessions = useAppStore((state) => state.sessions);
+  const attendances = useAppStore((state) => state.attendances);
+  const izinList = useAppStore((state) => state.izinList);
+  const currentUser = useAppStore((state) => state.currentUser);
+
+  return useMemo(() => {
+    if (!currentUser || currentUser.role !== 'praktikan') return [];
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const userSessions = sessions.filter(
+      (s) => s.kelas === currentUser.kelas && s.startAt.startsWith(todayStr),
+    );
+
+    const items = userSessions.map((session) => {
+      const att =
+        attendances.find(
+          (a) => a.sessionId === session.id && a.userId === currentUser.id,
+        ) ?? null;
+      const iz =
+        izinList.find(
+          (i) => i.sessionId === session.id && i.userId === currentUser.id,
+        ) ?? null;
+
+      const isIzinApproved = iz?.status === 'approved';
+      const canAttend = session.status === 'open' && !att && !isIzinApproved;
+
+      return { session, attendance: att, izin: iz, canAttend };
+    });
+
+    // FR-33: Sesi Dibuka yang belum dipresensi tampil paling atas
+    return items.sort((a, b) => {
+      if (a.canAttend && !b.canAttend) return -1;
+      if (!a.canAttend && b.canAttend) return 1;
+      return a.session.startAt.localeCompare(b.session.startAt);
+    });
+  }, [sessions, attendances, izinList, currentUser]);
+}
+
+export function useNotifPermission(): NotificationPermission {
+  return useAppStore((state) => state.notifPermission);
 }

@@ -3,9 +3,9 @@ import { listenSessions } from '@/services/sessions';
 import { listenAttendances } from '@/services/attendance';
 import { listenIzin } from '@/services/izin';
 import { listenPraktikan } from '@/services/users';
-import type { Attendance, Izin, KelasPraktikum, Session, User } from '@/types';
+import type { Attendance, Izin, KelasPraktikum, Lab, Session, User } from '@/types';
 
-export type SyncKey = 'sessions' | 'kelas' | 'attendances' | 'izin' | 'users';
+export type SyncKey = 'sessions' | 'kelas' | 'attendances' | 'izin' | 'users' | 'labs';
 export type SyncStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export type SyncStoreDelegate = {
@@ -16,6 +16,7 @@ export type SyncStoreDelegate = {
   setAttendances: (attendances: Attendance[]) => void;
   setIzinList: (izinList: Izin[]) => void;
   setUsers: (users: User[]) => void;
+  setLabs: (labs: Lab[]) => void;
   retryAi: (izinId: string) => Promise<unknown>;
 };
 
@@ -133,6 +134,12 @@ function startListener(key: SyncKey, user: User, delegate: SyncStoreDelegate) {
       }
       break;
     }
+
+    case 'labs': {
+      // Implementasi sementara D-02; listener Firestore penuh diimplementasikan pada D-03
+      delegate.setSyncStatus('labs', 'ready');
+      break;
+    }
   }
 }
 
@@ -141,7 +148,7 @@ export function startSync(user: User, delegate: SyncStoreDelegate): void {
   currentUserRef = user;
   currentDelegateRef = delegate;
 
-  const keys: SyncKey[] = ['kelas', 'sessions', 'attendances', 'izin', 'users'];
+  const keys: SyncKey[] = ['kelas', 'sessions', 'attendances', 'izin', 'users', 'labs'];
   for (const k of keys) {
     startListener(k, user, delegate);
   }
