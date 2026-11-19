@@ -99,6 +99,11 @@ export type Attendance = {
   kelas?: string;
   code?: string;
   timestamp: string; // ISO 8601 (UTC)
+  /**
+   * labId dan lokasi bersifat opsional karena data presensi lama (Sprint 2) tidak memiliki
+   * field ini. Untuk presensi baru (Sprint 3), kedua field ini wajib diisi oleh klien dan
+   * divalidasi oleh security rules.
+   */
   labId?: LabId;
   lokasi?: LokasiPresensi;
 };
