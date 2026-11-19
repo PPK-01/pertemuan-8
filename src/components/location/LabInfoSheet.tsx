@@ -14,6 +14,7 @@ export type LabInfoSheetProps = {
   lab: Lab | null;
   berlangsung: Session[];
   berikutnya: Session[];
+  jarakM?: number | null;
   onPilihSesi?: (sessionId: string) => void;
   style?: StyleProp<ViewStyle>;
 };
@@ -22,13 +23,19 @@ export function LabInfoSheet({
   lab,
   berlangsung,
   berikutnya,
+  jarakM,
   onPilihSesi,
   style,
 }: LabInfoSheetProps) {
+  const roundedJarak = jarakM != null ? Math.round(jarakM) : null;
+
   return (
     <View style={[styles.panel, style]}>
       <Text style={styles.labName}>{lab?.nama ?? 'Lab belum diatur'}</Text>
       {lab?.gedung ? <Text style={styles.gedung}>{lab.gedung}</Text> : null}
+      {roundedJarak != null ? (
+        <Text style={styles.jarak}>Jarak: {roundedJarak} m</Text>
+      ) : null}
 
       {berlangsung.length > 0 ? (
         <View style={styles.section}>
@@ -108,6 +115,7 @@ const styles = StyleSheet.create({
   },
   labName: { ...typography.title, color: colors.text },
   gedung: { ...typography.caption, color: colors.textMuted },
+  jarak: { ...typography.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   section: { gap: spacing.xs },
   sectionTitle: { ...typography.label, color: colors.textMuted },
   row: {
