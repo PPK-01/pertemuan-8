@@ -8,6 +8,7 @@ service cloud.firestore {
     function isAsisten() { return hasProfile() && me().role == 'asisten'; }
     function isPraktikan() { return hasProfile() && me().role == 'praktikan'; }
     function sessionOf(sid) { return get(/databases/$(db)/documents/sessions/$(sid)).data; }
+    function labOf(id) { return get(/databases/$(db)/documents/labs/$(id)).data; }
     function changedOnly(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
 
     match /config/{d} { 
@@ -34,17 +35,32 @@ service cloud.firestore {
       allow create, update, delete: if isAsisten();
     }
 
+    match /labs/{labId} {
+      allow read: if signedIn();
+      allow create, update: if isAsisten()
+        && request.resource.data.keys().hasOnly(['nama','gedung','lat','lng','radiusM',
+                                                 'createdBy','createdAt','updatedBy','updatedAt'])
+        && request.resource.data.nama is string
+        && request.resource.data.nama.size() >= 2 && request.resource.data.nama.size() <= 50
+        && request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
+        && request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
+        && request.resource.data.radiusM is int
+        && request.resource.data.radiusM >= 10 && request.resource.data.radiusM <= 200;
+      allow delete: if isAsisten();     // cek "masih dipakai" di service
+    }
+
     match /sessions/{sid} {
       allow read: if isAsisten() || (isPraktikan() && resource.data.kelas == me().kelas);
       allow create: if isAsisten() && request.resource.data.status == 'scheduled'
         && request.resource.data.createdBy == uid()
-        && request.resource.data.startAt < request.resource.data.endAt;
+        && request.resource.data.startAt < request.resource.data.endAt
+        && exists(/databases/$(db)/documents/labs/$(request.resource.data.labId));
       allow update: if isAsisten()
         && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.startAt < request.resource.data.endAt
         && ((resource.data.status == 'scheduled' && request.resource.data.status == 'scheduled')
             || (resource.data.status == 'open' && request.resource.data.status == 'open'
-                && changedOnly(['topik', 'ruang', 'endAt', 'updatedAt']))
+                && changedOnly(['topik', 'labId', 'endAt', 'updatedAt']))
             || (resource.data.status == 'scheduled' && request.resource.data.status == 'open')
             || (resource.data.status == 'open' && request.resource.data.status == 'closed'));
       allow delete: if isAsisten() && resource.data.status == 'scheduled';

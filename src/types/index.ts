@@ -209,7 +209,7 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'INVALID_INPUT'
   | 'CONFLICT'
-  /** Data dengan kunci unik yang sama sudah ada (mis. pasangan praktikum dan kelas). */
+  /** Data dengan kunci unik yang sama sudah ada (mis. pasangan praktikum dan kelas, nama lab). */
   | 'DUPLICATE'
   /** Data masih dirujuk data lain sehingga belum boleh diubah atau dihapus (FR-20, FR-43). */
   | 'IN_USE'
