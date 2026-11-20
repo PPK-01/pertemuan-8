@@ -26,7 +26,7 @@ import {
 import { spacing } from '@/theme/spacing';
 import type { Session } from '@/types';
 
-// FR-18 dan changedOnly di firestore.rules: sesi Dibuka hanya boleh mengubah topik, ruang,
+// FR-18 dan changedOnly di firestore.rules: sesi Dibuka hanya boleh mengubah topik, labId,
 // dan jam selesai. Kolom lain tetap tampil tetapi dikunci.
 const OPEN_LOCKED_FIELDS: readonly LockableField[] = ['praktikum', 'kelas', 'tanggal', 'jamMulai'];
 const OPEN_LOCKED_HINT = 'Tidak bisa diubah saat sesi dibuka.';
@@ -38,7 +38,7 @@ const goToList = () => router.replace('/asisten');
 
 function patchFor(status: Session['status'], input: SessionFormInput): Partial<Session> {
   if (status === 'open') {
-    return { topik: input.topik, ruang: input.ruang, endAt: input.endAt };
+    return { topik: input.topik, labId: input.labId, endAt: input.endAt };
   }
   return input;
 }
@@ -133,6 +133,7 @@ export default function AsistenBuatSesiScreen() {
       <SessionForm
         onSubmit={handleCreate}
         onManageKelas={() => router.push('/asisten/kelas')}
+        onManageLab={() => router.push('/asisten/lab')}
         submitting={submitting}
         submitError={submitError}
         disabledHint={disabledHint}
@@ -185,6 +186,8 @@ export default function AsistenBuatSesiScreen() {
           lockedFields={locked}
           lockedHint={OPEN_LOCKED_HINT}
           onSubmit={(input) => handleUpdate(session, input)}
+          onManageKelas={() => router.push('/asisten/kelas')}
+          onManageLab={() => router.push('/asisten/lab')}
           submitLabel="Simpan perubahan"
           submitting={submitting}
           submitError={submitError}
