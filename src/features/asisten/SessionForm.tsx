@@ -7,7 +7,6 @@ import { Chip } from '@/components/ui/Chip';
 import { SyncErrorState } from '@/components/ui/SyncErrorState';
 import { TextField } from '@/components/ui/TextField';
 import {
-  RUANG_MAX_LENGTH,
   TOPIK_MAX_LENGTH,
   emptySessionFormValues,
   validateSessionForm,
@@ -17,7 +16,7 @@ import type {
   SessionFormValues,
 } from '@/features/asisten/sessionFormValidation';
 import { useSyncRetry } from '@/features/asisten/useSyncRetry';
-import { useKelasList, useSyncState } from '@/store/appStore';
+import { useKelasList, useLabs, useSyncState } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -42,13 +41,20 @@ export type SessionFormProps = {
   lockedHint?: string;
   /** Ada = tombol "Kelola kelas" tampil saat belum ada kelas praktikum untuk dipilih. */
   onManageKelas?: () => void;
+  /** Ada = tombol "Kelola lab" tampil saat belum ada lab untuk dipilih. */
+  onManageLab?: () => void;
 };
 
-export type LockableField = 'praktikum' | 'kelas' | 'tanggal' | 'jamMulai';
+export type LockableField = 'praktikum' | 'kelas' | 'tanggal' | 'jamMulai' | 'labId';
+
+type OptionItem = {
+  label: string;
+  value: string;
+};
 
 type ChoiceGroupProps = {
   label: string;
-  options: readonly string[];
+  options: readonly (string | OptionItem)[];
   value: string | null;
   onChange: (value: string) => void;
   error?: string;
@@ -61,6 +67,7 @@ type ChoiceGroupProps = {
 };
 
 const KELAS_SYNC_KEYS = ['kelas'] as const;
+const LABS_SYNC_KEYS = ['labs'] as const;
 
 // Panjang maksimum isian DD/MM/YYYY dan HH.MM.
 const TANGGAL_MAX_LENGTH = 10;
@@ -98,15 +105,19 @@ function ChoiceGroup({
         </View>
       ) : (
         <View role="radiogroup" aria-label={label} style={styles.chips}>
-          {options.map((option) => (
-            <Chip
-              key={option}
-              label={option}
-              selected={value === option}
-              onPress={() => onChange(option)}
-              disabled={disabled}
-            />
-          ))}
+          {options.map((option) => {
+            const optValue = typeof option === 'string' ? option : option.value;
+            const optLabel = typeof option === 'string' ? option : option.label;
+            return (
+              <Chip
+                key={optValue}
+                label={optLabel}
+                selected={value === optValue}
+                onPress={() => onChange(optValue)}
+                disabled={disabled}
+              />
+            );
+          })}
         </View>
       )}
       {error ? (
@@ -135,10 +146,16 @@ export function SessionForm({
   lockedFields = [],
   lockedHint,
   onManageKelas,
+  onManageLab,
 }: SessionFormProps) {
   const kelasList = useKelasList();
   const kelasSync = useSyncState('kelas');
   const kelasRetry = useSyncRetry(KELAS_SYNC_KEYS);
+
+  const labsList = useLabs();
+  const labsSync = useSyncState('labs');
+  const labsRetry = useSyncRetry(LABS_SYNC_KEYS);
+
   const [values, setValues] = useState<SessionFormValues>(
     () => initialValues ?? emptySessionFormValues(),
   );
@@ -169,9 +186,26 @@ export function SessionForm({
     [kelasList, values.praktikum, values.kelas],
   );
 
+  // Pilihan lab berasal dari labs (FR-04, FR-18)
+  const labOptions: OptionItem[] = useMemo(() => {
+    const sorted = [...labsList].sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+    const options = sorted.map((lab) => ({
+      value: lab.id,
+      label: lab.gedung ? `${lab.nama} (${lab.gedung})` : lab.nama,
+    }));
+    // Bila nilai yang terpasang belum/tidak ada di daftar (mis. lab dihapus/sesi lama), tetap tampilkan
+    if (values.labId && !options.some((opt) => opt.value === values.labId)) {
+      options.unshift({
+        value: values.labId,
+        label: values.ruang || 'Lab saat ini',
+      });
+    }
+    return options;
+  }, [labsList, values.labId, values.ruang]);
+
   const result = useMemo(
-    () => validateSessionForm(values, pairLocked ? undefined : kelasList),
-    [values, kelasList, pairLocked],
+    () => validateSessionForm(values, pairLocked ? undefined : kelasList, labsList),
+    [values, pairLocked, kelasList, labsList],
   );
   const errors = attempted && !result.ok ? result.errors : {};
   const showValidationBanner = attempted && !result.ok;
@@ -204,11 +238,17 @@ export function SessionForm({
         ? 'Daftar kelas praktikum belum termuat.'
         : 'Belum ada kelas praktikum.';
 
+  const noLabText =
+    labsSync === 'loading'
+      ? 'Memuat daftar laboratorium…'
+      : labsSync === 'error'
+        ? 'Daftar laboratorium belum termuat.'
+        : 'Belum ada laboratorium.';
+
   return (
     <View style={styles.form}>
       <View style={styles.fields}>
-        {/* Pilihan praktikum dan kelas berasal dari listener kelas; tanpa ini daftar kosong
-            terbaca seperti "Belum ada kelas praktikum". */}
+        {/* Pilihan praktikum dan kelas berasal dari listener kelas */}
         {kelasRetry.visible ? (
           <SyncErrorState
             compact
@@ -251,15 +291,32 @@ export function SessionForm({
           maxLength={TOPIK_MAX_LENGTH}
           autoCapitalize="sentences"
         />
-        <TextField
-          label="Ruang"
-          value={values.ruang}
-          onChangeText={(text) => setField('ruang', text)}
-          placeholder="Mis. Lab 2"
-          error={errors.ruang}
-          maxLength={RUANG_MAX_LENGTH}
-          autoCapitalize="sentences"
+
+        {/* Pilihan lab menggantikan input teks ruang (FR-04, FR-18) */}
+        {labsRetry.visible ? (
+          <SyncErrorState
+            compact
+            message={labsRetry.message}
+            onRetry={labsRetry.retry}
+            retrying={labsRetry.retrying}
+          />
+        ) : null}
+        <ChoiceGroup
+          label="Laboratorium"
+          options={labOptions}
+          value={values.labId}
+          onChange={(value) => setField('labId', value)}
+          error={errors.labId}
+          emptyText={noLabText}
+          emptyAction={
+            onManageLab && labsSync === 'ready'
+              ? { label: 'Kelola lab', onPress: onManageLab }
+              : undefined
+          }
+          disabled={isLocked('labId')}
+          hint={isLocked('labId') ? lockedHint : undefined}
         />
+
         <TextField
           label="Tanggal"
           value={values.tanggal}

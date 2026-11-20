@@ -1,4 +1,4 @@
-import type { CreateSessionInput, Kelas, KelasPraktikum, Praktikum, Session } from '@/types';
+import type { CreateSessionInput, Kelas, KelasPraktikum, Lab, LabId, Praktikum, Session } from '@/types';
 
 /** Isian form sesi tanpa pembuat; createdBy diisi layar dari currentUser. */
 export type SessionFormInput = Omit<CreateSessionInput, 'createdBy'>;
@@ -12,7 +12,9 @@ export type SessionFormValues = {
   praktikum: Praktikum | null;
   kelas: Kelas | null;
   topik: string;
-  ruang: string;
+  labId: LabId | null;
+  /** Dipertahankan untuk kompatibilitas / sesi lama */
+  ruang?: string;
   /** DD/MM/YYYY; pemisah '/', '-', atau '.'. */
   tanggal: string;
   /** HH.MM 24 jam; pemisah '.' atau ':'. */
@@ -76,20 +78,26 @@ function toIso({ year, month, day }: DateParts, { hour, minute }: TimeParts): st
 /**
  * `pairs` diisi dari useKelasList(); bila ada, pasangan praktikum dan kelas wajib terdaftar
  * di kelasPraktikum (SRS §4.2). Lewati bila kedua kolom dikunci (sesi Dibuka).
+ * `labs` diisi dari useLabs(); bila ada, labId wajib ada di daftar lab yang terdaftar (SRS §4.2).
  */
 export function validateSessionForm(
   values: SessionFormValues,
   pairs?: readonly Pick<KelasPraktikum, 'praktikum' | 'kelas'>[],
+  labs?: readonly Pick<Lab, 'id' | 'nama'>[],
 ): SessionFormResult {
   const errors: SessionFormErrors = {};
   const topik = values.topik.trim();
-  const ruang = values.ruang.trim();
 
   if (!values.praktikum) errors.praktikum = 'Pilih praktikum';
   if (!values.kelas) errors.kelas = 'Pilih kelas';
   if (!topik) errors.topik = 'Topik wajib diisi';
   else if (topik.length < TOPIK_MIN_LENGTH) errors.topik = `Topik minimal ${TOPIK_MIN_LENGTH} karakter`;
-  if (!ruang) errors.ruang = 'Ruang wajib diisi';
+  
+  if (!values.labId) {
+    errors.labId = 'Pilih laboratorium';
+  } else if (labs && !labs.some((lab) => lab.id === values.labId)) {
+    errors.labId = 'Laboratorium tidak valid';
+  }
 
   if (
     pairs &&
@@ -118,6 +126,7 @@ export function validateSessionForm(
   if (
     !values.praktikum ||
     !values.kelas ||
+    !values.labId ||
     !tanggal.ok ||
     !jamMulai.ok ||
     !jamSelesai.ok ||
@@ -126,13 +135,16 @@ export function validateSessionForm(
     return { ok: false, errors };
   }
 
+  const selectedLab = labs?.find((l) => l.id === values.labId);
+
   return {
     ok: true,
     input: {
       praktikum: values.praktikum,
       kelas: values.kelas,
       topik,
-      ruang,
+      labId: values.labId,
+      ruang: selectedLab ? selectedLab.nama : (values.ruang ?? ''),
       startAt: toIso(tanggal.value, jamMulai.value),
       endAt: toIso(tanggal.value, jamSelesai.value),
     },
@@ -159,6 +171,7 @@ export function emptySessionFormValues(): SessionFormValues {
     praktikum: null,
     kelas: null,
     topik: '',
+    labId: null,
     ruang: '',
     tanggal: formatDateInput(new Date()),
     jamMulai: '',
@@ -174,6 +187,7 @@ export function sessionToFormValues(session: Session): SessionFormValues {
     praktikum: session.praktikum,
     kelas: session.kelas,
     topik: session.topik,
+    labId: session.labId ?? null,
     ruang: session.ruang,
     tanggal: formatDateInput(start),
     jamMulai: formatTimeInput(start),
