@@ -21,14 +21,22 @@ export function validateLabGedung(gedung?: string | null): LabValidationError | 
   return null;
 }
 
-export function validateLabKoordinat(lat: number, lng: number): LabValidationError | null {
+export function validateLabLat(lat: number): LabValidationError | null {
   if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < -90 || lat > 90) {
     return { ok: false, code: 'INVALID_INPUT', message: 'Latitude harus berupa angka antara -90 dan 90.' };
   }
+  return null;
+}
+
+export function validateLabLng(lng: number): LabValidationError | null {
   if (typeof lng !== 'number' || !Number.isFinite(lng) || lng < -180 || lng > 180) {
     return { ok: false, code: 'INVALID_INPUT', message: 'Longitude harus berupa angka antara -180 dan 180.' };
   }
   return null;
+}
+
+export function validateLabKoordinat(lat: number, lng: number): LabValidationError | null {
+  return validateLabLat(lat) ?? validateLabLng(lng);
 }
 
 export function validateLabRadius(radiusM: number): LabValidationError | null {

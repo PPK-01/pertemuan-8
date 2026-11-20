@@ -17,7 +17,7 @@ import { DeleteLabSheet } from '@/features/lab/DeleteLabSheet';
 import { LAB_FLASH_SCOPE } from '@/features/lab/labFlash';
 import { useAppStore, useIsOnline, useLabs, useSyncState } from '@/store/appStore';
 import { colors } from '@/theme/colors';
-import { spacing } from '@/theme/spacing';
+import { layout, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import type { Lab } from '@/types';
 
@@ -97,7 +97,7 @@ export default function AsistenLabListScreen() {
   const syncError = labsRetry.visible;
 
   async function confirmDelete() {
-    if (!labToDelete || deleting) {
+    if (!isOnline || !labToDelete || deleting) {
       return;
     }
     setDeleting(true);
@@ -172,6 +172,7 @@ export default function AsistenLabListScreen() {
         visible={labToDelete != null}
         loading={deleting}
         errorMessage={deleteError}
+        confirmDisabled={!isOnline}
         onClose={closeDelete}
         onConfirm={confirmDelete}
       />
@@ -204,6 +205,8 @@ const styles = StyleSheet.create({
   },
   rowMain: {
     flex: 1,
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
     gap: spacing.xs,
   },
   rowTitle: {
@@ -216,6 +219,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   deleteButton: {
+    minWidth: layout.minTouch,
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
   },

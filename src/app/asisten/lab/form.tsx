@@ -90,7 +90,7 @@ export default function AsistenLabFormScreen() {
   }
 
   async function handleDelete(original: Lab) {
-    if (deletingRef.current) return;
+    if (!isOnline || deletingRef.current) return;
     deletingRef.current = true;
     setDeleting(true);
 
@@ -123,6 +123,7 @@ export default function AsistenLabFormScreen() {
         submitting={submitting}
         submitError={submitError}
         disabledHint={disabledHint}
+        deleteDisabled={!isOnline}
       />
     );
   } else if (!target && deleting) {
@@ -160,6 +161,7 @@ export default function AsistenLabFormScreen() {
           submitting={submitting}
           submitError={submitError}
           disabledHint={disabledHint}
+          deleteDisabled={!isOnline}
         />
 
         <View style={styles.deleteGroup}>
@@ -172,6 +174,7 @@ export default function AsistenLabFormScreen() {
           visible={sheetOpen}
           loading={deleting}
           errorMessage={deleteError?.message ?? null}
+          confirmDisabled={!isOnline}
           onClose={closeSheet}
           onConfirm={() => handleDelete(target)}
         />
