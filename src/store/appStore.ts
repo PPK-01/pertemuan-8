@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
+import type { AppStateStatus } from 'react-native';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
+import { LOCATION_TIMEOUT_MS } from '@/constants/location';
 import {
   dummyAttendances,
   dummyIzin,
@@ -26,6 +29,15 @@ import {
   deleteLab as svcDeleteLab,
 } from '@/services/labs';
 import {
+  distanceM,
+  getPermission as svcGetPermission,
+  getPosition as svcGetPosition,
+  openSettings as svcOpenLocationSettings,
+  requestEnableServices as svcRequestEnableServices,
+  requestPermission as svcRequestPermission,
+  watchPosition as svcWatchPosition,
+} from '@/services/location';
+import {
   createSession as svcCreateSession,
   deleteSession as svcDeleteSession,
   getSessionCode as svcGetSessionCode,
@@ -41,6 +53,7 @@ import {
 } from '@/services/izin';
 import { classifyIzin } from '@/services/ai';
 import { connectionService } from '@/services/connection';
+import { devWarn } from '@/services/devLog';
 import { isFirebaseReady } from '@/services/firebase';
 import { withWriteGuard } from '@/services/guard';
 import {
@@ -214,6 +227,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       syncStartSync(user, getSyncDelegate(get, set));
     } else {
       syncStopSync(getSyncDelegate(get, set));
+      stopGlobalWatch();
+      watchRefCount = 0;
       // Seluruh cache dikosongkan agar akun berikutnya di perangkat yang sama tidak melihat data
       // akun sebelumnya (mis. daftar praktikan atau kode sesi milik asisten).
       set({
@@ -284,6 +299,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   logout: async () => {
+    stopGlobalWatch();
+    watchRefCount = 0;
     const res = await authLogout();
     // Bila signOut gagal, sesi Firebase Auth masih aktif dan akun ini akan masuk lagi saat
     // aplikasi dibuka ulang; mengosongkan cache hanya membuat pengguna mengira sudah keluar.
@@ -396,30 +413,46 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   requestLocation: async () => {
-    const dummyPos: DevicePosition = {
-      lat: -7.770123,
-      lng: 110.370123,
-      akurasiM: 10,
-      mocked: false,
-      at: new Date().toISOString(),
-    };
-    set({
-      location: {
-        status: 'ready',
-        position: dummyPos,
-      },
-    });
-    return 'ready';
+    set((state) => ({ location: { ...state.location, status: 'checking' } }));
+
+    // Cek izin terlebih dahulu (SRS 3.5: minta izin bila perlu, lalu ambil posisi)
+    const perm = await svcGetPermission();
+    if (!perm.granted) {
+      if (perm.canAskAgain || perm.status === 'undetermined') {
+        const req = await svcRequestPermission();
+        if (!req.granted) {
+          const status: LocationStatus = req.canAskAgain
+            ? 'permission_denied'
+            : 'permission_blocked';
+          set({ location: { status, position: null } });
+          return status;
+        }
+      } else {
+        set({ location: { status: 'permission_blocked', position: null } });
+        return 'permission_blocked';
+      }
+    }
+
+    const res = await svcGetPosition(LOCATION_TIMEOUT_MS);
+    set({ location: { status: res.status, position: res.position } });
+    return res.status;
   },
 
   refreshLocation: async () => {
-    return get().requestLocation();
+    set((state) => ({ location: { ...state.location, status: 'checking' } }));
+    const res = await svcGetPosition(LOCATION_TIMEOUT_MS);
+    set({ location: { status: res.status, position: res.position } });
+    return res.status;
   },
 
-  openLocationSettings: async () => {},
+  openLocationSettings: async () => {
+    await svcOpenLocationSettings();
+  },
 
   enableLocationServices: async () => {
-    return get().requestLocation();
+    set((state) => ({ location: { ...state.location, status: 'checking' } }));
+    await svcRequestEnableServices();
+    return get().refreshLocation();
   },
 
   registerDevice: async () => {
@@ -816,6 +849,63 @@ export function useLabActivity(labId: string | undefined): {
   }, [labId, sessions, currentUser]);
 }
 
+let watchRefCount = 0;
+let globalWatchCleanup: (() => void) | null = null;
+let isWatchingStarting = false;
+
+async function startGlobalWatch(
+  set: (fn: (state: AppStoreState) => Partial<AppStoreState>) => void,
+) {
+  if (globalWatchCleanup || isWatchingStarting) return;
+  isWatchingStarting = true;
+  try {
+    const cleanup = await svcWatchPosition(({ status, position }) => {
+      set((state) => ({
+        location: {
+          status,
+          position:
+            position ??
+            (status === 'ready' || status === 'low_accuracy' || status === 'mocked'
+              ? position
+              : state.location.position),
+        },
+      }));
+    });
+    if (watchRefCount === 0 || AppState.currentState !== 'active') {
+      cleanup();
+      globalWatchCleanup = null;
+    } else {
+      globalWatchCleanup = cleanup;
+    }
+  } catch (err) {
+    devWarn('location-watch', err);
+  } finally {
+    isWatchingStarting = false;
+  }
+}
+
+function stopGlobalWatch() {
+  if (globalWatchCleanup) {
+    try {
+      globalWatchCleanup();
+    } catch {
+      // Abaikan error di cleanup
+    }
+    globalWatchCleanup = null;
+  }
+}
+
+// NFR-18: Hentikan watch saat aplikasi ke latar belakang, lanjutkan saat kembali aktif
+AppState.addEventListener('change', (nextState: AppStateStatus) => {
+  if (nextState === 'active') {
+    if (watchRefCount > 0 && !globalWatchCleanup) {
+      void startGlobalWatch(useAppStore.setState);
+    }
+  } else {
+    stopGlobalWatch();
+  }
+});
+
 export function useLocation(): {
   status: LocationStatus;
   position: DevicePosition | null;
@@ -823,61 +913,71 @@ export function useLocation(): {
   return useAppStore(useShallow((state) => state.location));
 }
 
-function calculateDistanceM(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c);
-}
-
 /**
  * Hook menghitung jarak perangkat ke laboratorium (FR-36).
- * Menggunakan useMemo agar objek hasil stabil dan tidak memicu re-render.
+ * Menggunakan useMemo agar objek hasil stabil dan tidak memicu re-render jika koordinat tidak berubah.
  */
 export function useDistanceToLab(
   labId: string | undefined,
 ): { jarakM: number; didalamRadius: boolean } | null {
-  const labs = useAppStore((state) => state.labs);
+  const lab = useAppStore(
+    useCallback(
+      (state) => (labId ? state.labs.find((l) => l.id === labId) : undefined),
+      [labId],
+    ),
+  );
   const position = useAppStore((state) => state.location.position);
 
-  return useMemo(() => {
-    if (!labId || !position) return null;
-    const lab = labs.find((l) => l.id === labId);
-    if (!lab) return null;
+  const labLat = lab?.lat;
+  const labLng = lab?.lng;
+  const labRadiusM = lab?.radiusM;
+  const posLat = position?.lat;
+  const posLng = position?.lng;
 
-    const jarakM = calculateDistanceM(
-      position.lat,
-      position.lng,
-      lab.lat,
-      lab.lng,
+  return useMemo(() => {
+    if (
+      labLat === undefined ||
+      labLng === undefined ||
+      labRadiusM === undefined ||
+      posLat === undefined ||
+      posLng === undefined
+    ) {
+      return null;
+    }
+
+    const jarakM = distanceM(
+      { lat: posLat, lng: posLng },
+      { lat: labLat, lng: labLng },
     );
 
     return {
       jarakM,
-      didalamRadius: jarakM <= lab.radiusM,
+      didalamRadius: jarakM <= labRadiusM,
     };
-  }, [labId, labs, position]);
+  }, [labLat, labLng, labRadiusM, posLat, posLng]);
 }
 
+/**
+ * Hook memantau posisi perangkat saat layar aktif (NFR-13, NFR-18).
+ * Menyalakan watch posisi di latar depan dengan akurasi Balanced dan interval 5s/5m.
+ * Otomatis berhenti saat layar ditinggalkan (unmount) atau aplikasi ke latar belakang (background).
+ */
 export function useWatchPosition(enabled: boolean): void {
-  const requestLocation = useAppStore((state) => state.requestLocation);
-
   useEffect(() => {
     if (!enabled) return;
-    void requestLocation();
-  }, [enabled, requestLocation]);
+
+    watchRefCount++;
+    if (watchRefCount === 1 && AppState.currentState === 'active') {
+      void startGlobalWatch(useAppStore.setState);
+    }
+
+    return () => {
+      watchRefCount = Math.max(0, watchRefCount - 1);
+      if (watchRefCount === 0) {
+        stopGlobalWatch();
+      }
+    };
+  }, [enabled]);
 }
 
 /**
