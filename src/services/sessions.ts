@@ -12,13 +12,12 @@ import type { DocumentData } from 'firebase/firestore';
 import { db, isFirebaseReady } from './firebase';
 import { devWarn } from './devLog';
 import { mapFirebaseError } from './errors';
-import { dummySessionCodes, dummySessions } from '@/data/dummy';
 import type { CreateSessionInput, Result, Session, User } from '@/types';
 import { createId, createSessionCode } from '@/utils/id';
-import { getInMemoryLabs } from './labs';
+import { inMemory, getInMemoryLabs, getInMemorySessions } from './inMemoryStore';
 
-let inMemorySessions: Session[] = [...dummySessions];
-let inMemoryCodes: Record<string, string> = { ...dummySessionCodes };
+export { getInMemorySessions };
+
 const fallbackSessionListeners = new Set<() => void>();
 
 function notifyFallbackSessionListeners() {
@@ -29,10 +28,6 @@ function notifyFallbackSessionListeners() {
       // Abaikan error di callback
     }
   });
-}
-
-export function getInMemorySessions(): Session[] {
-  return inMemorySessions;
 }
 
 function toSession(id: string, data: DocumentData): Session {
@@ -72,8 +67,8 @@ export function listenSessions(
     const notify = () => {
       const filtered =
         user.role === 'asisten'
-          ? inMemorySessions
-          : inMemorySessions.filter((s) => s.kelas === user.kelas);
+          ? inMemory.sessions
+          : inMemory.sessions.filter((s) => s.kelas === user.kelas);
       onData(filtered);
     };
     notify();
@@ -130,7 +125,7 @@ export async function createSession(
       };
     }
 
-    const existing = inMemorySessions.find((s) => s.id === sessionId);
+    const existing = inMemory.sessions.find((s) => s.id === sessionId);
     if (existing) {
       return { ok: true, data: existing };
     }
@@ -148,8 +143,8 @@ export async function createSession(
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    inMemorySessions = [...inMemorySessions, newSession];
-    inMemoryCodes[sessionId] = code;
+    inMemory.sessions = [...inMemory.sessions, newSession];
+    inMemory.codes[sessionId] = code;
     notifyFallbackSessionListeners();
     return { ok: true, data: newSession };
   }
@@ -246,7 +241,7 @@ export async function updateSession(
   }
 
   if (!isFirebaseReady || !db) {
-    inMemorySessions = inMemorySessions.map((s) => {
+    inMemory.sessions = inMemory.sessions.map((s) => {
       if (s.id !== id) return s;
       return { ...s, ...patch, updatedAt: new Date().toISOString() };
     });
@@ -256,6 +251,7 @@ export async function updateSession(
 
   try {
     const sessionRef = doc(db, 'sessions', id);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _id, ...cleanPatch } = patch;
     const batch = writeBatch(db);
     batch.update(sessionRef, {
@@ -278,7 +274,7 @@ export async function setStatus(
   const now = new Date().toISOString();
 
   if (!isFirebaseReady || !db) {
-    inMemorySessions = inMemorySessions.map((s) => {
+    inMemory.sessions = inMemory.sessions.map((s) => {
       if (s.id !== id) return s;
       return status === 'open'
         ? { ...s, status: 'open', openedAt: now, updatedAt: now }
@@ -314,8 +310,8 @@ export async function setStatus(
 
 export async function deleteSession(id: string): Promise<Result> {
   if (!isFirebaseReady || !db) {
-    inMemorySessions = inMemorySessions.filter((s) => s.id !== id);
-    delete inMemoryCodes[id];
+    inMemory.sessions = inMemory.sessions.filter((s) => s.id !== id);
+    delete inMemory.codes[id];
     notifyFallbackSessionListeners();
     return { ok: true, data: undefined };
   }
@@ -342,7 +338,7 @@ const CODE_NOT_FOUND: Result<string> = {
 /** Kode sesi 4 digit (khusus asisten). Gagal baca dikembalikan sebagai Result, bukan null. */
 export async function getSessionCode(sessionId: string): Promise<Result<string>> {
   if (!isFirebaseReady || !db) {
-    const code = inMemoryCodes[sessionId];
+    const code = inMemory.codes[sessionId];
     return code !== undefined ? { ok: true, data: code } : CODE_NOT_FOUND;
   }
 

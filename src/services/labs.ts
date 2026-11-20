@@ -15,21 +15,20 @@ import type { DocumentData } from 'firebase/firestore';
 import { db, isFirebaseReady } from './firebase';
 import { devWarn } from './devLog';
 import { mapFirebaseError } from './errors';
-import { getInMemorySessions } from './sessions';
-import { dummyLabs } from '@/data/dummy';
+import { inMemory, getInMemoryLabs, getInMemorySessions } from './inMemoryStore';
 import { MAX_RADIUS_M, MIN_RADIUS_M } from '@/constants/location';
 import type {
   CreateLabInput,
   Lab,
   LabId,
   Result,
-  Session,
   UpdateLabInput,
   User,
 } from '@/types';
 import { createId } from '@/utils/id';
 
-let inMemoryLabs: Lab[] = [...dummyLabs];
+export { getInMemoryLabs };
+
 const fallbackLabsListeners = new Set<() => void>();
 
 function notifyFallbackLabsListeners() {
@@ -40,10 +39,6 @@ function notifyFallbackLabsListeners() {
       // Abaikan error di callback
     }
   });
-}
-
-export function getInMemoryLabs(): Lab[] {
-  return inMemoryLabs;
 }
 
 function toLab(id: string, data: DocumentData): Lab {
@@ -73,7 +68,7 @@ export function listenLabs(
 ): () => void {
   if (!isFirebaseReady || !db) {
     const notify = () => {
-      onData(inMemoryLabs);
+      onData(inMemory.labs);
     };
     notify();
     fallbackLabsListeners.add(notify);
@@ -196,7 +191,7 @@ export async function addLab(input: CreateLabInput, user: User): Promise<Result<
   try {
     let currentLabs: Lab[] = [];
     if (!isFirebaseReady || !db) {
-      currentLabs = inMemoryLabs;
+      currentLabs = inMemory.labs;
     } else {
       const snap = await getDocs(collection(db, 'labs'));
       currentLabs = snap.docs.map((d) => toLab(d.id, d.data()));
@@ -224,7 +219,7 @@ export async function addLab(input: CreateLabInput, user: User): Promise<Result<
         updatedBy: user.id,
         updatedAt: now,
       };
-      inMemoryLabs = [...inMemoryLabs, newLab];
+      inMemory.labs = [...inMemory.labs, newLab];
       notifyFallbackLabsListeners();
       return { ok: true, data: newLab };
     }
@@ -273,7 +268,7 @@ export async function updateLab(
   try {
     let currentLabs: Lab[] = [];
     if (!isFirebaseReady || !db) {
-      currentLabs = inMemoryLabs;
+      currentLabs = inMemory.labs;
     } else {
       const snap = await getDocs(collection(db, 'labs'));
       currentLabs = snap.docs.map((d) => toLab(d.id, d.data()));
@@ -287,7 +282,7 @@ export async function updateLab(
     const now = new Date().toISOString();
 
     if (!isFirebaseReady || !db) {
-      const target = inMemoryLabs.find((l) => l.id === id);
+      const target = inMemory.labs.find((l) => l.id === id);
       if (!target) {
         return { ok: false, code: 'NOT_FOUND', message: 'Lab tidak ditemukan.' };
       }
@@ -307,7 +302,7 @@ export async function updateLab(
         updatedAt: now,
       };
 
-      inMemoryLabs = inMemoryLabs.map((l) => (l.id === id ? updated : l));
+      inMemory.labs = inMemory.labs.map((l) => (l.id === id ? updated : l));
       notifyFallbackLabsListeners();
       return { ok: true, data: undefined };
     }
@@ -340,38 +335,23 @@ export async function updateLab(
   }
 }
 
-export async function deleteLab(id: LabId, activeSessions?: Session[]): Promise<Result> {
+export async function deleteLab(id: LabId): Promise<Result> {
   try {
-    let sessionsToCheck: Session[] = [];
+    let inUse = false;
 
-    if (activeSessions !== undefined) {
-      sessionsToCheck = activeSessions;
-    } else if (!isFirebaseReady || !db) {
-      sessionsToCheck = getInMemorySessions();
+    if (!isFirebaseReady || !db) {
+      inUse = getInMemorySessions().some(
+        (s) => s.labId === id && s.status !== 'closed',
+      );
     } else {
+      // Selalu query Firestore untuk sesi dengan labId == id (satu field, tidak butuh composite index)
+      // lalu saring status != 'closed' di klien agar tidak lolos saat cache lokal belum tersinkron
       const q = query(collection(db, 'sessions'), where('labId', '==', id));
       const snap = await getDocs(q);
-      sessionsToCheck = snap.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          praktikum: data.praktikum,
-          kelas: data.kelas,
-          topik: data.topik,
-          ruang: data.ruang ?? '',
-          labId: data.labId,
-          startAt: data.startAt,
-          endAt: data.endAt,
-          status: data.status,
-          createdBy: data.createdBy,
-        } as Session;
-      });
+      inUse = snap.docs.some((d) => d.data().status !== 'closed');
     }
 
     // FR-43: Lab tidak dapat dihapus bila masih dipakai sesi yang belum Ditutup
-    const inUse = sessionsToCheck.some(
-      (s) => s.labId === id && s.status !== 'closed',
-    );
     if (inUse) {
       return {
         ok: false,
@@ -381,7 +361,7 @@ export async function deleteLab(id: LabId, activeSessions?: Session[]): Promise<
     }
 
     if (!isFirebaseReady || !db) {
-      inMemoryLabs = inMemoryLabs.filter((l) => l.id !== id);
+      inMemory.labs = inMemory.labs.filter((l) => l.id !== id);
       notifyFallbackLabsListeners();
       return { ok: true, data: undefined };
     }

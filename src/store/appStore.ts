@@ -367,7 +367,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   addLab: async (input) => {
     const user = get().currentUser;
     if (!user) {
-      return { ok: false, code: 'PERMISSION_DENIED', message: 'Hanya asisten yang dapat menambah lab.' };
+      return { ok: false, code: 'PERMISSION_DENIED', message: 'Harap masuk terlebih dahulu' };
     }
     return withWriteGuard(() => svcAddLab(input, user));
   },
@@ -375,7 +375,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   updateLab: async (id, patch) => {
     const user = get().currentUser;
     if (!user) {
-      return { ok: false, code: 'PERMISSION_DENIED', message: 'Hanya asisten yang dapat mengubah lab.' };
+      return { ok: false, code: 'PERMISSION_DENIED', message: 'Harap masuk terlebih dahulu' };
     }
     return withWriteGuard(() => svcUpdateLab(id, patch, user));
   },
@@ -392,7 +392,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         message: 'Lab ini masih dipakai sesi yang belum ditutup.',
       };
     }
-    return withWriteGuard(() => svcDeleteLab(id, get().sessions));
+    return withWriteGuard(() => svcDeleteLab(id));
   },
 
   requestLocation: async () => {
