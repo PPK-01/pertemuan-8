@@ -38,7 +38,7 @@ const goToList = () => router.replace('/asisten');
 
 function patchFor(status: Session['status'], input: SessionFormInput): Partial<Session> {
   if (status === 'open') {
-    return { topik: input.topik, labId: input.labId, ruang: input.ruang, endAt: input.endAt };
+    return { topik: input.topik, labId: input.labId, endAt: input.endAt };
   }
   return input;
 }

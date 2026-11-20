@@ -1,7 +1,7 @@
 import type { CreateSessionInput, Kelas, KelasPraktikum, Lab, LabId, Praktikum, Session } from '@/types';
 
 /** Isian form sesi tanpa pembuat; createdBy diisi layar dari currentUser. */
-export type SessionFormInput = Omit<CreateSessionInput, 'createdBy'>;
+export type SessionFormInput = Omit<CreateSessionInput, 'createdBy' | 'ruang'>;
 
 // Batas panjang SRS §4.2.
 export const TOPIK_MIN_LENGTH = 3;
@@ -13,7 +13,7 @@ export type SessionFormValues = {
   kelas: Kelas | null;
   topik: string;
   labId: LabId | null;
-  /** Dipertahankan untuk kompatibilitas / sesi lama */
+  /** Dipertahankan untuk label pilihan pada sesi lama */
   ruang?: string;
   /** DD/MM/YYYY; pemisah '/', '-', atau '.'. */
   tanggal: string;
@@ -78,7 +78,7 @@ function toIso({ year, month, day }: DateParts, { hour, minute }: TimeParts): st
 /**
  * `pairs` diisi dari useKelasList(); bila ada, pasangan praktikum dan kelas wajib terdaftar
  * di kelasPraktikum (SRS §4.2). Lewati bila kedua kolom dikunci (sesi Dibuka).
- * `labs` diisi dari useLabs(); bila ada, labId wajib ada di daftar lab yang terdaftar (SRS §4.2).
+ * `labs` diisi dari useLabs(); lewati pengecekan bila undefined (mis. listener labs belum ready).
  */
 export function validateSessionForm(
   values: SessionFormValues,
@@ -92,7 +92,7 @@ export function validateSessionForm(
   if (!values.kelas) errors.kelas = 'Pilih kelas';
   if (!topik) errors.topik = 'Topik wajib diisi';
   else if (topik.length < TOPIK_MIN_LENGTH) errors.topik = `Topik minimal ${TOPIK_MIN_LENGTH} karakter`;
-  
+
   if (!values.labId) {
     errors.labId = 'Pilih laboratorium';
   } else if (labs && !labs.some((lab) => lab.id === values.labId)) {
@@ -135,8 +135,6 @@ export function validateSessionForm(
     return { ok: false, errors };
   }
 
-  const selectedLab = labs?.find((l) => l.id === values.labId);
-
   return {
     ok: true,
     input: {
@@ -144,7 +142,6 @@ export function validateSessionForm(
       kelas: values.kelas,
       topik,
       labId: values.labId,
-      ruang: selectedLab ? selectedLab.nama : (values.ruang ?? ''),
       startAt: toIso(tanggal.value, jamMulai.value),
       endAt: toIso(tanggal.value, jamSelesai.value),
     },
@@ -172,7 +169,6 @@ export function emptySessionFormValues(): SessionFormValues {
     kelas: null,
     topik: '',
     labId: null,
-    ruang: '',
     tanggal: formatDateInput(new Date()),
     jamMulai: '',
     jamSelesai: '',

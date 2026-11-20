@@ -204,8 +204,13 @@ export function SessionForm({
   }, [labsList, values.labId, values.ruang]);
 
   const result = useMemo(
-    () => validateSessionForm(values, pairLocked ? undefined : kelasList, labsList),
-    [values, pairLocked, kelasList, labsList],
+    () =>
+      validateSessionForm(
+        values,
+        pairLocked ? undefined : kelasList,
+        labsSync === 'ready' ? labsList : undefined,
+      ),
+    [values, pairLocked, kelasList, labsList, labsSync],
   );
   const errors = attempted && !result.ok ? result.errors : {};
   const showValidationBanner = attempted && !result.ok;
@@ -248,7 +253,8 @@ export function SessionForm({
   return (
     <View style={styles.form}>
       <View style={styles.fields}>
-        {/* Pilihan praktikum dan kelas berasal dari listener kelas */}
+        {/* Pilihan praktikum dan kelas berasal dari listener kelas; tanpa ini daftar kosong
+            terbaca seperti "Belum ada kelas praktikum". */}
         {kelasRetry.visible ? (
           <SyncErrorState
             compact
