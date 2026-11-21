@@ -2,55 +2,16 @@ import * as Location from 'expo-location';
 import type { LocationPermissionResponse } from 'expo-location';
 import { Linking, Platform } from 'react-native';
 
-import { LOCATION_TIMEOUT_MS, MAX_ACCURACY_M } from '@/constants/location';
+import { DEV_FAKE_POSITION, LOCATION_TIMEOUT_MS, MAX_ACCURACY_M } from '@/constants/location';
 import type { DevicePosition, LocationStatus } from '@/types';
 import { devWarn } from './devLog';
 
 const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
 
-let devSimulatedStatus: LocationStatus | null = null;
-let devFakePosition: DevicePosition | null = null;
-
-export function setDevSimulatedStatus(status: LocationStatus | null): void {
-  if (isDev) {
-    devSimulatedStatus = status;
-  }
-}
-
-export function getDevSimulatedStatus(): LocationStatus | null {
-  return devSimulatedStatus;
-}
-
-export function setDevFakePosition(pos: DevicePosition | null): void {
-  if (isDev) {
-    devFakePosition = pos;
-  }
-}
-
-export function getDevFakePosition(): DevicePosition | null {
-  return devFakePosition;
-}
-
 /**
  * Memeriksa status izin lokasi di latar depan (foreground).
  */
 export async function getPermission(): Promise<LocationPermissionResponse> {
-  if (isDev && devSimulatedStatus === 'permission_denied') {
-    return {
-      status: Location.PermissionStatus.DENIED,
-      granted: false,
-      canAskAgain: true,
-      expires: 'never',
-    };
-  }
-  if (isDev && devSimulatedStatus === 'permission_blocked') {
-    return {
-      status: Location.PermissionStatus.DENIED,
-      granted: false,
-      canAskAgain: false,
-      expires: 'never',
-    };
-  }
   try {
     return await Location.getForegroundPermissionsAsync();
   } catch (err) {
@@ -68,22 +29,6 @@ export async function getPermission(): Promise<LocationPermissionResponse> {
  * Meminta izin lokasi di latar depan (foreground).
  */
 export async function requestPermission(): Promise<LocationPermissionResponse> {
-  if (isDev && devSimulatedStatus === 'permission_denied') {
-    return {
-      status: Location.PermissionStatus.DENIED,
-      granted: false,
-      canAskAgain: true,
-      expires: 'never',
-    };
-  }
-  if (isDev && devSimulatedStatus === 'permission_blocked') {
-    return {
-      status: Location.PermissionStatus.DENIED,
-      granted: false,
-      canAskAgain: false,
-      expires: 'never',
-    };
-  }
   try {
     return await Location.requestForegroundPermissionsAsync();
   } catch (err) {
@@ -112,9 +57,6 @@ export async function openSettings(): Promise<void> {
  * Memeriksa apakah layanan lokasi perangkat (GPS) sedang aktif.
  */
 export async function isServicesEnabled(): Promise<boolean> {
-  if (isDev && devSimulatedStatus === 'services_off') {
-    return false;
-  }
   if (Platform.OS === 'web') {
     return Boolean(typeof navigator !== 'undefined' && navigator.geolocation);
   }
@@ -176,64 +118,11 @@ export function distanceM(
 export async function getPosition(
   timeoutMs: number = LOCATION_TIMEOUT_MS,
 ): Promise<{ status: LocationStatus; position: DevicePosition | null }> {
-  // 0. Simulasi dev status bila aktif
-  if (isDev && devSimulatedStatus) {
-    switch (devSimulatedStatus) {
-      case 'permission_denied':
-        return { status: 'permission_denied', position: null };
-      case 'permission_blocked':
-        return { status: 'permission_blocked', position: null };
-      case 'services_off':
-        return { status: 'services_off', position: null };
-      case 'low_accuracy':
-        return {
-          status: 'low_accuracy',
-          position: {
-            lat: -7.770123,
-            lng: 110.370123,
-            akurasiM: 65,
-            mocked: false,
-            at: new Date().toISOString(),
-          },
-        };
-      case 'mocked':
-        return {
-          status: 'mocked',
-          position: {
-            lat: -7.770123,
-            lng: 110.370123,
-            akurasiM: 10,
-            mocked: true,
-            at: new Date().toISOString(),
-          },
-        };
-      case 'timeout':
-        return { status: 'timeout', position: null };
-      case 'unavailable':
-        return { status: 'unavailable', position: null };
-      case 'idle':
-        return { status: 'idle', position: null };
-      case 'checking':
-        return { status: 'checking', position: null };
-      case 'ready':
-        return {
-          status: 'ready',
-          position: {
-            lat: -7.770123,
-            lng: 110.370123,
-            akurasiM: 10,
-            mocked: false,
-            at: new Date().toISOString(),
-          },
-        };
-    }
-  }
-
-  // 1. Posisi palsu untuk pengujian radius (__DEV__)
-  if (isDev && devFakePosition) {
+  // 1. Posisi tiruan pengembangan (__DEV__) untuk pengujian radius (SRS §3.5)
+  if (isDev && DEV_FAKE_POSITION) {
     return {
       status: 'ready',
-      position: devFakePosition,
+      position: DEV_FAKE_POSITION,
     };
   }
 
@@ -329,14 +218,8 @@ export async function getPosition(
 export async function watchPosition(
   callback: (result: { status: LocationStatus; position: DevicePosition | null }) => void,
 ): Promise<() => void> {
-  if (isDev && devSimulatedStatus) {
-    const sim = await getPosition();
-    callback(sim);
-    return () => {};
-  }
-
-  if (isDev && devFakePosition) {
-    callback({ status: 'ready', position: devFakePosition });
+  if (isDev && DEV_FAKE_POSITION) {
+    callback({ status: 'ready', position: DEV_FAKE_POSITION });
     return () => {};
   }
 

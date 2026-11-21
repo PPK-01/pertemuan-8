@@ -196,6 +196,8 @@ function getSyncDelegate(get: () => AppStoreState, set: (partial: Partial<AppSto
   };
 }
 
+let locationEpoch = 0;
+
 export const useAppStore = create<AppStoreState>()((set, get) => ({
   authStatus: 'loading',
   currentUser: null,
@@ -227,8 +229,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       syncStartSync(user, getSyncDelegate(get, set));
     } else {
       syncStopSync(getSyncDelegate(get, set));
+      locationEpoch++;
       stopGlobalWatch();
-      watchRefCount = 0;
       // Seluruh cache dikosongkan agar akun berikutnya di perangkat yang sama tidak melihat data
       // akun sebelumnya (mis. daftar praktikan atau kode sesi milik asisten).
       set({
@@ -299,12 +301,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   logout: async () => {
-    stopGlobalWatch();
-    watchRefCount = 0;
     const res = await authLogout();
     // Bila signOut gagal, sesi Firebase Auth masih aktif dan akun ini akan masuk lagi saat
     // aplikasi dibuka ulang; mengosongkan cache hanya membuat pengguna mengira sudah keluar.
     if (res.ok) {
+      locationEpoch++;
+      stopGlobalWatch();
       get().setCurrentUser(null);
     }
     return res;
@@ -413,36 +415,88 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   requestLocation: async () => {
+    const epoch = ++locationEpoch;
     set((state) => ({ location: { ...state.location, status: 'checking' } }));
 
-    // Cek izin terlebih dahulu (SRS 3.5: minta izin bila perlu, lalu ambil posisi)
-    const perm = await svcGetPermission();
-    if (!perm.granted) {
-      if (perm.canAskAgain || perm.status === 'undetermined') {
-        const req = await svcRequestPermission();
-        if (!req.granted) {
-          const status: LocationStatus = req.canAskAgain
-            ? 'permission_denied'
-            : 'permission_blocked';
-          set({ location: { status, position: null } });
-          return status;
+    try {
+      // Cek izin terlebih dahulu (SRS 3.5: minta izin bila perlu, lalu ambil posisi)
+      const perm = await svcGetPermission();
+      if (epoch !== locationEpoch) {
+        return get().location.status;
+      }
+
+      if (!perm.granted) {
+        if (perm.canAskAgain || perm.status === 'undetermined') {
+          const req = await svcRequestPermission();
+          if (epoch !== locationEpoch) {
+            return get().location.status;
+          }
+          if (!req.granted) {
+            const status: LocationStatus = req.canAskAgain
+              ? 'permission_denied'
+              : 'permission_blocked';
+            set({ location: { status, position: null } });
+            return status;
+          }
+        } else {
+          set({ location: { status: 'permission_blocked', position: null } });
+          return 'permission_blocked';
         }
-      } else {
-        set({ location: { status: 'permission_blocked', position: null } });
-        return 'permission_blocked';
+      }
+
+      const res = await svcGetPosition(LOCATION_TIMEOUT_MS);
+      if (epoch !== locationEpoch) {
+        return get().location.status;
+      }
+
+      const isValidPos =
+        res.status === 'ready' ||
+        res.status === 'low_accuracy' ||
+        res.status === 'mocked';
+      const position = isValidPos ? res.position : null;
+      set({ location: { status: res.status, position } });
+      return res.status;
+    } catch {
+      if (epoch === locationEpoch) {
+        set({ location: { status: 'unavailable', position: null } });
+        return 'unavailable';
+      }
+      return get().location.status;
+    } finally {
+      if (epoch === locationEpoch && get().location.status === 'checking') {
+        set({ location: { status: 'unavailable', position: null } });
       }
     }
-
-    const res = await svcGetPosition(LOCATION_TIMEOUT_MS);
-    set({ location: { status: res.status, position: res.position } });
-    return res.status;
   },
 
   refreshLocation: async () => {
+    const epoch = ++locationEpoch;
     set((state) => ({ location: { ...state.location, status: 'checking' } }));
-    const res = await svcGetPosition(LOCATION_TIMEOUT_MS);
-    set({ location: { status: res.status, position: res.position } });
-    return res.status;
+    try {
+      const res = await svcGetPosition(LOCATION_TIMEOUT_MS);
+      if (epoch !== locationEpoch) {
+        return get().location.status;
+      }
+
+      const isValidPos =
+        res.status === 'ready' ||
+        res.status === 'low_accuracy' ||
+        res.status === 'mocked';
+      const position = isValidPos ? res.position : null;
+
+      set({ location: { status: res.status, position } });
+      return res.status;
+    } catch {
+      if (epoch === locationEpoch) {
+        set({ location: { status: 'unavailable', position: null } });
+        return 'unavailable';
+      }
+      return get().location.status;
+    } finally {
+      if (epoch === locationEpoch && get().location.status === 'checking') {
+        set({ location: { status: 'unavailable', position: null } });
+      }
+    }
   },
 
   openLocationSettings: async () => {
@@ -450,9 +504,25 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   enableLocationServices: async () => {
+    const epoch = ++locationEpoch;
     set((state) => ({ location: { ...state.location, status: 'checking' } }));
-    await svcRequestEnableServices();
-    return get().refreshLocation();
+    try {
+      await svcRequestEnableServices();
+      if (epoch !== locationEpoch) {
+        return get().location.status;
+      }
+      return await get().refreshLocation();
+    } catch {
+      if (epoch === locationEpoch) {
+        set({ location: { status: 'services_off', position: null } });
+        return 'services_off';
+      }
+      return get().location.status;
+    } finally {
+      if (epoch === locationEpoch && get().location.status === 'checking') {
+        set({ location: { status: 'services_off', position: null } });
+      }
+    }
   },
 
   registerDevice: async () => {
@@ -852,26 +922,52 @@ export function useLabActivity(labId: string | undefined): {
 let watchRefCount = 0;
 let globalWatchCleanup: (() => void) | null = null;
 let isWatchingStarting = false;
+let watchEpoch = 0;
 
 async function startGlobalWatch(
   set: (fn: (state: AppStoreState) => Partial<AppStoreState>) => void,
 ) {
   if (globalWatchCleanup || isWatchingStarting) return;
   isWatchingStarting = true;
+  const currentEpoch = ++watchEpoch;
+
   try {
     const cleanup = await svcWatchPosition(({ status, position }) => {
-      set((state) => ({
+      // Guard: jangan tulis jika watch sudah dihentikan atau berganti sesi (logout/stop)
+      if (currentEpoch !== watchEpoch || watchRefCount === 0) {
+        return;
+      }
+
+      const isValidPosition =
+        status === 'ready' || status === 'low_accuracy' || status === 'mocked';
+      const nextPosition = isValidPosition ? position : null;
+
+      const prev = useAppStore.getState().location;
+      const prevPos = prev.position;
+
+      // Skip set() jika status, koordinat, akurasi, dan mocked identik (poin 5 review)
+      const isSamePosition =
+        (!prevPos && !nextPosition) ||
+        (prevPos !== null &&
+          nextPosition !== null &&
+          prevPos.lat === nextPosition.lat &&
+          prevPos.lng === nextPosition.lng &&
+          prevPos.akurasiM === nextPosition.akurasiM &&
+          prevPos.mocked === nextPosition.mocked);
+
+      if (prev.status === status && isSamePosition) {
+        return;
+      }
+
+      set(() => ({
         location: {
           status,
-          position:
-            position ??
-            (status === 'ready' || status === 'low_accuracy' || status === 'mocked'
-              ? position
-              : state.location.position),
+          position: nextPosition,
         },
       }));
     });
-    if (watchRefCount === 0 || AppState.currentState !== 'active') {
+
+    if (currentEpoch !== watchEpoch || watchRefCount === 0 || AppState.currentState !== 'active') {
       cleanup();
       globalWatchCleanup = null;
     } else {
@@ -885,6 +981,7 @@ async function startGlobalWatch(
 }
 
 function stopGlobalWatch() {
+  watchEpoch++;
   if (globalWatchCleanup) {
     try {
       globalWatchCleanup();
