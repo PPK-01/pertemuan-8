@@ -11,8 +11,9 @@ import {
 import { db, isFirebaseReady } from './firebase';
 import { connectionService } from './connection';
 import { devWarn } from './devLog';
+import { MAX_ACCURACY_M } from '@/constants/location';
 import { dummyAttendances, dummySessionCodes } from '@/data/dummy';
-import type { Attendance, AttendResult, Session, User } from '@/types';
+import type { Attendance, AttendResult, Lab, LokasiPresensi, Session, User } from '@/types';
 
 let inMemoryAttendances: Attendance[] = [...dummyAttendances];
 const fallbackAttendanceListeners = new Set<() => void>();
@@ -68,6 +69,16 @@ export function listenAttendances(
             typeof data.timestamp?.toDate === 'function'
               ? data.timestamp.toDate().toISOString()
               : (data.timestamp || new Date().toISOString()),
+          labId: data.labId,
+          lokasi: data.lokasi
+            ? {
+                lat: data.lokasi.lat,
+                lng: data.lokasi.lng,
+                akurasiM: data.lokasi.akurasiM,
+                jarakM: data.lokasi.jarakM,
+                mocked: Boolean(data.lokasi.mocked),
+              }
+            : undefined,
         };
       });
       onData(list);
@@ -86,6 +97,9 @@ export async function submitAttendance(
   user: User,
   code: string,
   session: Session,
+  labId: string,
+  lokasi: LokasiPresensi,
+  lab?: Lab,
 ): Promise<AttendResult> {
   // 1. Pra-cek koneksi (FR-29, SRS 4.3)
   if (!connectionService.isConnected) {
@@ -119,7 +133,10 @@ export async function submitAttendance(
       sessionId,
       userId: user.id,
       kelas: user.kelas,
+      code: code.trim(),
       timestamp: new Date().toISOString(),
+      labId,
+      lokasi,
     };
     inMemoryAttendances = [...inMemoryAttendances, att];
     notifyFallbackAttendanceListeners();
@@ -143,6 +160,14 @@ export async function submitAttendance(
         kelas: user.kelas,
         code: code.trim(),
         timestamp: serverTimestamp(),
+        labId,
+        lokasi: {
+          lat: lokasi.lat,
+          lng: lokasi.lng,
+          akurasiM: lokasi.akurasiM,
+          jarakM: lokasi.jarakM,
+          mocked: lokasi.mocked,
+        },
       });
 
       const att: Attendance = {
@@ -150,7 +175,10 @@ export async function submitAttendance(
         sessionId,
         userId: user.id,
         kelas: user.kelas,
+        code: code.trim(),
         timestamp: new Date().toISOString(),
+        labId,
+        lokasi,
       };
       return { ok: true, attendance: att };
     } catch (err: unknown) {
@@ -188,6 +216,17 @@ export async function submitAttendance(
           }
         } catch {
           // Abaikan
+        }
+
+        // Cek lokasi apakah melanggar rules
+        if (lokasi.mocked) {
+          return { ok: false, reason: 'MOCKED_LOCATION' };
+        }
+        if (lokasi.akurasiM > MAX_ACCURACY_M) {
+          return { ok: false, reason: 'LOW_ACCURACY' };
+        }
+        if (lab && lokasi.jarakM > lab.radiusM) {
+          return { ok: false, reason: 'OUTSIDE_RADIUS' };
         }
 
         return { ok: false, reason: 'INVALID_CODE' };

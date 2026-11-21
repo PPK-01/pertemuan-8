@@ -73,7 +73,7 @@ service cloud.firestore {
     match /attendances/{aid} {
       allow read: if isAsisten() || (signedIn() && resource.data.userId == uid());
       allow create: if isPraktikan()
-        && request.resource.data.keys().hasOnly(['sessionId','userId','kelas','code','timestamp'])
+        && request.resource.data.keys().hasOnly(['sessionId','userId','kelas','code','timestamp','labId','lokasi'])
         && aid == request.resource.data.sessionId + '_' + uid()
         && request.resource.data.userId == uid()
         && request.resource.data.kelas == me().kelas
@@ -83,7 +83,17 @@ service cloud.firestore {
         && request.resource.data.code ==
            get(/databases/$(db)/documents/sessions/$(request.resource.data.sessionId)/private/code).data.code
         && !(exists(/databases/$(db)/documents/izin/$(aid))
-             && get(/databases/$(db)/documents/izin/$(aid)).data.status == 'approved');
+             && get(/databases/$(db)/documents/izin/$(aid)).data.status == 'approved')
+        && ('labId' in sessionOf(request.resource.data.sessionId))
+        && request.resource.data.labId == sessionOf(request.resource.data.sessionId).labId
+        && request.resource.data.lokasi is map
+        && request.resource.data.lokasi.keys().hasOnly(['lat', 'lng', 'akurasiM', 'jarakM', 'mocked'])
+        && request.resource.data.lokasi.keys().hasAll(['lat', 'lng', 'akurasiM', 'jarakM', 'mocked'])
+        && request.resource.data.lokasi.lat is number && request.resource.data.lokasi.lat >= -90 && request.resource.data.lokasi.lat <= 90
+        && request.resource.data.lokasi.lng is number && request.resource.data.lokasi.lng >= -180 && request.resource.data.lokasi.lng <= 180
+        && request.resource.data.lokasi.akurasiM is number && request.resource.data.lokasi.akurasiM >= 0 && request.resource.data.lokasi.akurasiM <= 50
+        && request.resource.data.lokasi.jarakM is number && request.resource.data.lokasi.jarakM >= 0 && request.resource.data.lokasi.jarakM <= labOf(request.resource.data.labId).radiusM
+        && request.resource.data.lokasi.mocked is bool && request.resource.data.lokasi.mocked == false;
       allow update, delete: if false;
     }
 
