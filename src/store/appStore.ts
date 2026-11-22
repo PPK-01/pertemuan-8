@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import type { AppStateStatus } from 'react-native';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { LOCATION_TIMEOUT_MS } from '@/constants/location';
+import { LOCATION_TIMEOUT_MS, MAX_ACCURACY_M } from '@/constants/location';
 import {
   dummyAttendances,
   dummyIzin,
@@ -75,6 +75,7 @@ import type {
   KelasPraktikum,
   Lab,
   LocationStatus,
+  LokasiPresensi,
   NotificationPermission,
   RegisterInput,
   Rekap,
@@ -530,25 +531,28 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   submitAttendance: async (sessionId, code) => {
+    // 1. Offline (SRS 4.3, FR-29)
+    if (!connectionService.isConnected) {
+      return { ok: false, reason: 'NO_CONNECTION' };
+    }
+
     const user = get().currentUser;
     if (!user) {
       return { ok: false, reason: 'UNKNOWN' };
     }
 
+    // 2. Sesi tidak Dibuka
     const session = get().sessions.find((s) => s.id === sessionId);
-    if (!session) {
+    if (!session || session.status !== 'open') {
       return { ok: false, reason: 'SESSION_NOT_OPEN' };
     }
 
-    // Cek apakah izin sudah disetujui (FR-28)
-    const approvedIzin = get().izinList.some(
-      (i) => i.sessionId === sessionId && i.userId === user.id && i.status === 'approved',
-    );
-    if (approvedIzin) {
-      return { ok: false, reason: 'IZIN_APPROVED' };
+    // 3. Kelas berbeda
+    if (!user.kelas || user.kelas !== session.kelas) {
+      return { ok: false, reason: 'NOT_IN_CLASS' };
     }
 
-    // Pra-cek lokal sudah presensi
+    // 4. Sudah hadir
     const alreadyAttended = get().attendances.some(
       (a) => a.sessionId === sessionId && a.userId === user.id,
     );
@@ -556,7 +560,87 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       return { ok: false, reason: 'ALREADY_ATTENDED' };
     }
 
-    return svcSubmitAttendance(sessionId, user, code, session);
+    // 5. Izin disetujui (FR-28)
+    const approvedIzin = get().izinList.some(
+      (i) => i.sessionId === sessionId && i.userId === user.id && i.status === 'approved',
+    );
+    if (approvedIzin) {
+      return { ok: false, reason: 'IZIN_APPROVED' };
+    }
+
+    // 6. Lab tidak ada
+    if (!session.labId) {
+      return { ok: false, reason: 'NO_LAB' };
+    }
+    const lab = get().labs.find((l) => l.id === session.labId);
+    if (!lab) {
+      return { ok: false, reason: 'NO_LAB' };
+    }
+
+    // 7. Status lokasi bukan 'ready'
+    // Ambil ulang posisi bila umurnya > 30 detik atau status belum 'ready'
+    let loc = get().location;
+    const now = Date.now();
+    const posTime = loc.position?.at ? new Date(loc.position.at).getTime() : 0;
+    const ageMs = now - posTime;
+    const isStale = !loc.position || isNaN(posTime) || ageMs > 30000 || ageMs < 0;
+
+    if (loc.status !== 'ready' || isStale) {
+      await get().refreshLocation();
+      loc = get().location;
+    }
+
+    // Cek ulang currentUser setelah async refresh lokasi (mis. bila user logout saat menunggu)
+    if (!get().currentUser) {
+      return { ok: false, reason: 'UNKNOWN' };
+    }
+
+    if (loc.status !== 'ready' || !loc.position) {
+      switch (loc.status) {
+        case 'permission_denied':
+        case 'permission_blocked':
+          return { ok: false, reason: 'LOCATION_PERMISSION' };
+        case 'services_off':
+          return { ok: false, reason: 'LOCATION_SERVICES_OFF' };
+        case 'low_accuracy':
+          return { ok: false, reason: 'LOW_ACCURACY' };
+        case 'mocked':
+          return { ok: false, reason: 'MOCKED_LOCATION' };
+        case 'timeout':
+          return { ok: false, reason: 'LOCATION_TIMEOUT' };
+        default:
+          return { ok: false, reason: 'UNKNOWN' };
+      }
+    }
+
+    // Posisi cuma valid kalau status 'ready'
+    const pos = loc.position;
+    if (pos.mocked) {
+      return { ok: false, reason: 'MOCKED_LOCATION' };
+    }
+    if (pos.akurasiM > MAX_ACCURACY_M) {
+      return { ok: false, reason: 'LOW_ACCURACY' };
+    }
+
+    // 8. Di luar radius
+    const jarakM = distanceM(
+      { lat: pos.lat, lng: pos.lng },
+      { lat: lab.lat, lng: lab.lng },
+    );
+
+    if (jarakM > lab.radiusM) {
+      return { ok: false, reason: 'OUTSIDE_RADIUS' };
+    }
+
+    const lokasi: LokasiPresensi = {
+      lat: pos.lat,
+      lng: pos.lng,
+      akurasiM: pos.akurasiM,
+      jarakM,
+      mocked: pos.mocked,
+    };
+
+    return svcSubmitAttendance(sessionId, user, code, session, session.labId, lokasi, lab);
   },
 
   submitIzin: async (sessionId, alasan) => {
