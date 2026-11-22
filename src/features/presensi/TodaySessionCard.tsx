@@ -124,8 +124,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   infoBold: {
+    ...typography.body,
     color: colors.text,
-    fontWeight: '600',
+    fontWeight: typography.label.fontWeight,
   },
   footerRow: {
     alignItems: 'flex-start',
