@@ -12,10 +12,8 @@ import { SyncErrorState } from '@/components/ui/SyncErrorState';
 import { DEFAULT_RADIUS_M } from '@/constants/location';
 import { useSyncRetry } from '@/features/asisten/useSyncRetry';
 import { getAttendFailMessage } from '@/features/praktikan/attendMessages';
-import type { AttendFailParams } from '@/features/praktikan/attendMessages';
 import { PresensiLokasiForm } from '@/features/presensi/PresensiLokasiForm';
 import { TodaySessionCard } from '@/features/presensi/TodaySessionCard';
-import { distanceM } from '@/services/location';
 import {
   useAppStore,
   useDistanceToLab,
@@ -79,8 +77,10 @@ export function PresensiScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{
     id: number;
+    sessionId: string;
     success: boolean;
-    message: string;
+    reason?: AttendFailReason;
+    successTimestamp?: string;
   } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const submittingRef = useRef(false);
@@ -100,7 +100,7 @@ export function PresensiScreen() {
   const distanceInfo = useDistanceToLab(activeLab?.id);
   const location = useLocation();
 
-  // Reset code, formError, dan submitResult saat sesi aktif berubah otomatis (poin 4)
+  // Reset code, formError, submitResult, dan tutup sheet saat sesi aktif berubah otomatis
   useEffect(() => {
     const currentId = activeSession?.id ?? null;
     if (lastActiveSessionIdRef.current !== currentId) {
@@ -108,6 +108,7 @@ export function PresensiScreen() {
       setCode('');
       setFormError(null);
       setSubmitResult(null);
+      setSheetVisible(false);
     }
   }, [activeSession?.id]);
 
@@ -117,6 +118,7 @@ export function PresensiScreen() {
     setCode('');
     setSubmitResult(null);
     setFormError(null);
+    setSheetVisible(false);
   };
 
   const handleChangeCode = (value: string) => {
@@ -124,68 +126,37 @@ export function PresensiScreen() {
     if (formError) setFormError(null);
   };
 
-  const buildFailParams = (reason: AttendFailReason): { message?: string; params?: AttendFailParams } => {
-    const state = useAppStore.getState();
-    const currentLab = activeSession?.id
-      ? state.labs.find((l) => l.id === activeSession.labId)
-      : undefined;
-    const currentPos = state.location.position;
-
+  const renderFailMessage = (reason: AttendFailReason): string => {
     if (reason === 'OUTSIDE_RADIUS') {
-      const labName = currentLab?.nama ?? activeSession?.ruang ?? 'Lab';
-      const radius = currentLab?.radiusM ?? DEFAULT_RADIUS_M;
-
-      let jarakM: number | undefined;
-      if (
-        currentPos?.lat != null &&
-        currentPos?.lng != null &&
-        currentLab?.lat != null &&
-        currentLab?.lng != null
-      ) {
-        jarakM = Math.round(
-          distanceM(
-            { lat: currentPos.lat, lng: currentPos.lng },
-            { lat: currentLab.lat, lng: currentLab.lng },
-          ),
-        );
-      } else if (distanceInfo?.jarakM != null) {
-        jarakM = Math.round(distanceInfo.jarakM);
-      }
+      const labName = activeLab?.nama ?? activeSession?.ruang ?? 'Lab';
+      const radius = activeLab?.radiusM ?? DEFAULT_RADIUS_M;
+      const jarakM = distanceInfo?.jarakM != null ? Math.round(distanceInfo.jarakM) : null;
 
       if (jarakM != null) {
-        return {
-          params: {
-            x: jarakM,
-            lab: labName,
-            radius,
-          },
-        };
+        return getAttendFailMessage(reason, {
+          x: jarakM,
+          lab: labName,
+          radius,
+        });
       }
 
-      return {
-        message: `Kamu berada di luar radius ${labName}. Mendekatlah hingga ${radius} m.`,
-      };
+      return `Kamu berada di luar radius ${labName}. Mendekatlah hingga ${radius} m.`;
     }
 
     if (reason === 'LOW_ACCURACY') {
-      const akurasiM = currentPos?.akurasiM != null
-        ? Math.round(currentPos.akurasiM)
-        : location.position?.akurasiM != null
+      const akurasiM =
+        location.position?.akurasiM != null
           ? Math.round(location.position.akurasiM)
-          : undefined;
+          : null;
 
       if (akurasiM != null) {
-        return {
-          params: { x: akurasiM },
-        };
+        return getAttendFailMessage(reason, { x: akurasiM });
       }
 
-      return {
-        message: 'Lokasi belum akurat. Pindah ke dekat jendela atau tempat terbuka, lalu perbarui.',
-      };
+      return 'Lokasi belum akurat. Pindah ke dekat jendela atau tempat terbuka, lalu perbarui.';
     }
 
-    return {};
+    return getAttendFailMessage(reason);
   };
 
   const handleConfirmAttendance = async () => {
@@ -203,31 +174,30 @@ export function PresensiScreen() {
       if (res.ok) {
         setSubmitResult((prev) => ({
           id: (prev?.id ?? 0) + 1,
+          sessionId: activeSession.id,
           success: true,
-          message: `Presensi berhasil! Tercatat pukul ${formatTime(res.attendance.timestamp)}.`,
+          successTimestamp: res.attendance.timestamp,
         }));
         setCode('');
       } else {
-        const failData = buildFailParams(res.reason);
-        const message =
-          failData.message ?? getAttendFailMessage(res.reason, failData.params);
-
         if (res.reason === 'INVALID_CODE') {
-          setFormError(message);
+          setFormError(getAttendFailMessage(res.reason));
           setSubmitResult(null);
         } else {
           setSubmitResult((prev) => ({
             id: (prev?.id ?? 0) + 1,
+            sessionId: activeSession.id,
             success: false,
-            message,
+            reason: res.reason,
           }));
         }
       }
     } catch {
       setSubmitResult((prev) => ({
         id: (prev?.id ?? 0) + 1,
+        sessionId: activeSession.id,
         success: false,
-        message: getAttendFailMessage('UNKNOWN'),
+        reason: 'UNKNOWN',
       }));
     } finally {
       submittingRef.current = false;
@@ -278,13 +248,15 @@ export function PresensiScreen() {
               {selectedItem && activeSession ? (
                 <View style={styles.section}>
                   {submitResult &&
+                  submitResult.sessionId === activeSession.id &&
                   !submitResult.success &&
+                  submitResult.reason &&
                   !selectedItem.attendance &&
                   selectedItem.izin?.status !== 'approved' ? (
                     <Banner
                       key={`submit-danger-${submitResult.id}`}
                       tone="danger"
-                      message={submitResult.message}
+                      message={renderFailMessage(submitResult.reason)}
                     />
                   ) : null}
 
@@ -304,11 +276,15 @@ export function PresensiScreen() {
                     />
                   ) : selectedItem.canAttend ? (
                     <>
-                      {submitResult?.success ? (
+                      {submitResult?.success &&
+                      submitResult.sessionId === activeSession.id &&
+                      submitResult.successTimestamp ? (
                         <Banner
                           key={`submit-success-${submitResult.id}`}
                           tone="success"
-                          message={submitResult.message}
+                          message={`Presensi berhasil! Tercatat pukul ${formatTime(
+                            submitResult.successTimestamp,
+                          )}.`}
                         />
                       ) : null}
 
