@@ -1,11 +1,19 @@
-import { useEffect } from 'react';
-import { DefaultTheme, Stack, router, useSegments } from 'expo-router';
+import { useCallback, useEffect, useRef } from 'react';
+import { DefaultTheme, Stack, router, useSegments, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 
 import { LoadingState } from '@/components/ui/LoadingState';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
-import { useAppStore, useAuthStatus, useCurrentUser, useIsOnline } from '@/store/appStore';
+import {
+  getNotifTargetRoute,
+  useAppStore,
+  useAuthStatus,
+  useCurrentUser,
+  useIsOnline,
+  useNotificationHandler,
+} from '@/store/appStore';
+import type { NotifPayload } from '@/types';
 import { colors } from '@/theme/colors';
 
 const navigationTheme = {
@@ -28,6 +36,9 @@ export default function RootLayout() {
   const segments = useSegments();
   const initAuth = useAppStore((state) => state.initAuth);
 
+  // Ref untuk menyimpan notifikasi yang diketuk sebelum login (FR-52)
+  const pendingNotifPayloadRef = useRef<NotifPayload | null>(null);
+
   // 1. Inisialisasi Auth Observer (SRS §10 Aturan 6: tanpa impor services/)
   useEffect(() => {
     const unsubscribe = initAuth();
@@ -36,7 +47,20 @@ export default function RootLayout() {
     };
   }, [initAuth]);
 
-  // 2. Proteksi Rute (Route Guarding / Role Gate)
+  // 2. Listener Notifikasi (N1 -> /praktikan/presensi, N2/N4 -> detail sesi, N3 -> detail izin)
+  useNotificationHandler(
+    useCallback((targetRoute: string, payload: NotifPayload) => {
+      const user = useAppStore.getState().currentUser;
+      if (!user) {
+        // Belum login: simpan payload agar layar terkait dibuka setelah login (FR-52)
+        pendingNotifPayloadRef.current = payload;
+      } else {
+        router.push(targetRoute as Href);
+      }
+    }, []),
+  );
+
+  // 3. Proteksi Rute (Route Guarding / Role Gate) & Navigasi Notifikasi Tertunda
   useEffect(() => {
     if (authStatus === 'loading') return;
 
@@ -53,11 +77,28 @@ export default function RootLayout() {
     } else {
       // Sudah login tapi masih di layar auth
       if (inAuthGroup) {
+        if (pendingNotifPayloadRef.current) {
+          const payload = pendingNotifPayloadRef.current;
+          pendingNotifPayloadRef.current = null;
+          const target = getNotifTargetRoute(payload, currentUser.role);
+          router.replace(target as Href);
+          return;
+        }
+
         if (currentUser.role === 'asisten') {
           router.replace('/asisten');
         } else {
           router.replace('/praktikan/jadwal');
         }
+        return;
+      }
+
+      // Notifikasi tertunda saat user sudah di rute dalam aplikasi
+      if (pendingNotifPayloadRef.current) {
+        const payload = pendingNotifPayloadRef.current;
+        pendingNotifPayloadRef.current = null;
+        const target = getNotifTargetRoute(payload, currentUser.role);
+        router.push(target as Href);
         return;
       }
 
