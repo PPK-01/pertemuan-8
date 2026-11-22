@@ -28,6 +28,19 @@ service cloud.firestore {
                      == get(/databases/$(db)/documents/config/asisten).data.inviteCode));
       allow update: if signedIn() && uid() == id && changedOnly(['name']);
       allow delete: if false;
+
+      match /devices/{deviceId} {
+        allow read: if signedIn() && (uid() == id || isAsisten());
+        allow create, update: if signedIn() && uid() == id
+          && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['token', 'platform', 'updatedAt'])
+          && request.resource.data.token is string && request.resource.data.token.size() > 0
+          && request.resource.data.token.size() <= 200
+          && request.resource.data.platform is string
+          && request.resource.data.platform in ['android', 'ios']
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if signedIn() && (uid() == id || isAsisten());
+      }
     }
 
     match /kelasPraktikum/{id} {
