@@ -210,6 +210,8 @@ function getSyncDelegate(get: () => AppStoreState, set: (partial: Partial<AppSto
 
 let locationEpoch = 0;
 
+let isRegisteringDevice = false;
+
 export const useAppStore = create<AppStoreState>()((set, get) => ({
   authStatus: 'loading',
   currentUser: null,
@@ -307,9 +309,6 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const res = await authRegister(input);
     if (res.ok) {
       get().setCurrentUser(res.data);
-      get().registerDevice().catch((err) => {
-        devWarn('register-registerDevice', err);
-      });
     }
     return res;
   },
@@ -318,10 +317,6 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const res = await authLogin(email, password);
     if (res.ok) {
       get().setCurrentUser(res.data);
-      // Token diperbarui tiap login (FR-50, FR-54)
-      get().registerDevice().catch((err) => {
-        devWarn('login-registerDevice', err);
-      });
     }
     return res;
   },
@@ -329,9 +324,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   logout: async () => {
     const user = get().currentUser;
     if (user) {
-      // Hapus token perangkat saat logout (FR-50); jalankan sebelum signOut saat auth masih aktif
+      // Hapus token perangkat saat logout (FR-50); race timeout 10 detik agar tidak hang saat offline
       try {
-        await svcRemoveDeviceToken(user.id);
+        await Promise.race([
+          svcRemoveDeviceToken(user.id),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('TIMEOUT')), 10000),
+          ),
+        ]);
       } catch (err) {
         devWarn('logout-removeDeviceToken', err);
       }
@@ -561,9 +561,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   registerDevice: async () => {
+    if (isRegisteringDevice) return;
     const user = get().currentUser;
     if (!user) return;
 
+    isRegisteringDevice = true;
     try {
       // Minta izin notifikasi (dengan dialog penjelasan sebelum dialog sistem jika undetermined)
       const perm = await svcRequestNotifPermission(true);
@@ -577,6 +579,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       }
     } catch (err) {
       devWarn('store-registerDevice', err);
+    } finally {
+      isRegisteringDevice = false;
     }
   },
 
@@ -1271,11 +1275,19 @@ export function useNotificationHandler(
   onNavigate: (targetRoute: string, payload: NotifPayload) => void,
 ): void {
   useEffect(() => {
+    let lastResponseId: string | null = null;
+
     const unsubscribe = addNotificationListeners(
       (notification) => {
         devWarn('notif-received-foreground', notification.request.content.title);
       },
       (response) => {
+        const id = response.notification.request.identifier;
+        if (id && id === lastResponseId) {
+          return;
+        }
+        lastResponseId = id;
+
         const payload = extractNotifPayload(
           response.notification.request.content.data,
         );

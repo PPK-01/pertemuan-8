@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { DefaultTheme, Stack, router, useSegments } from 'expo-router';
+import { DefaultTheme, Stack, router, useSegments, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 
@@ -49,17 +49,15 @@ export default function RootLayout() {
 
   // 2. Listener Notifikasi (N1 -> /praktikan/presensi, N2/N4 -> detail sesi, N3 -> detail izin)
   useNotificationHandler(
-    useCallback(
-      (targetRoute: string, payload: NotifPayload) => {
-        if (!currentUser) {
-          // Belum login: simpan payload agar layar terkait dibuka setelah login (FR-52)
-          pendingNotifPayloadRef.current = payload;
-        } else {
-          router.push(targetRoute as any);
-        }
-      },
-      [currentUser],
-    ),
+    useCallback((targetRoute: string, payload: NotifPayload) => {
+      const user = useAppStore.getState().currentUser;
+      if (!user) {
+        // Belum login: simpan payload agar layar terkait dibuka setelah login (FR-52)
+        pendingNotifPayloadRef.current = payload;
+      } else {
+        router.push(targetRoute as Href);
+      }
+    }, []),
   );
 
   // 3. Proteksi Rute (Route Guarding / Role Gate) & Navigasi Notifikasi Tertunda
@@ -83,7 +81,7 @@ export default function RootLayout() {
           const payload = pendingNotifPayloadRef.current;
           pendingNotifPayloadRef.current = null;
           const target = getNotifTargetRoute(payload, currentUser.role);
-          router.replace(target as any);
+          router.replace(target as Href);
           return;
         }
 
@@ -100,7 +98,7 @@ export default function RootLayout() {
         const payload = pendingNotifPayloadRef.current;
         pendingNotifPayloadRef.current = null;
         const target = getNotifTargetRoute(payload, currentUser.role);
-        router.push(target as any);
+        router.push(target as Href);
         return;
       }
 

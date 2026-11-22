@@ -9,6 +9,7 @@ import { db, isFirebaseReady } from './firebase';
 import { devWarn } from './devLog';
 
 let cachedToken: string | null = null;
+let lastHandledColdStartIdentifier: string | null = null;
 
 // Fallback in-memory jika Firebase belum aktif
 const inMemoryDevices = new Map<
@@ -17,13 +18,30 @@ const inMemoryDevices = new Map<
 >();
 
 /**
+ * Konfigurasi channel notifikasi Android dengan prioritas MAX (wajib sebelum meminta izin di Android 13+).
+ */
+export async function setupAndroidNotificationChannel(): Promise<void> {
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#208AEF',
+      });
+    } catch (err) {
+      devWarn('notif-setNotificationChannel', err);
+    }
+  }
+}
+
+/**
  * Konfigurasi handler tampilan notifikasi foreground (banner sistem).
  */
 export function configureNotificationHandler(): void {
   try {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
         shouldShowBanner: true,
         shouldShowList: true,
         shouldPlaySound: true,
@@ -80,6 +98,9 @@ export async function requestNotifPermission(
   }
 
   try {
+    // Buat channel Android SEBELUM meminta izin (Android 13+)
+    await setupAndroidNotificationChannel();
+
     const current = await getNotifPermission();
     if (current === 'granted') {
       return 'granted';
@@ -147,14 +168,7 @@ export async function getDeviceToken(): Promise<string | null> {
     }
 
     // Pastikan channel notifikasi Android dibuat dengan prioritas MAX
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#208AEF',
-      });
-    }
+    await setupAndroidNotificationChannel();
 
     const projectId =
       Constants?.expoConfig?.extra?.eas?.projectId ??
@@ -212,11 +226,12 @@ export async function saveDeviceToken(
 
   const deviceId = hashToken(token);
   cachedToken = token;
+  const platform = Platform.OS === 'ios' ? 'ios' : 'android';
 
   if (!isFirebaseReady || !db) {
     inMemoryDevices.set(`${uid}_${deviceId}`, {
       token,
-      platform: Platform.OS,
+      platform,
       updatedAt: new Date().toISOString(),
     });
     return { ok: true, data: undefined };
@@ -226,7 +241,7 @@ export async function saveDeviceToken(
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
     await setDoc(deviceRef, {
       token,
-      platform: Platform.OS,
+      platform,
       updatedAt: serverTimestamp(),
     });
     return { ok: true, data: undefined };
@@ -242,7 +257,7 @@ export async function saveDeviceToken(
 
 /**
  * Menghapus token perangkat di users/{uid}/devices/{deviceId} saat logout (FR-50)
- * atau saat token ditolak (FR-54).
+ * atau saat token ditolak (FR-54). Dilengkapi timeout 10 detik agar tidak hang saat offline.
  */
 export async function removeDeviceToken(
   uid: string,
@@ -263,7 +278,12 @@ export async function removeDeviceToken(
 
   try {
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
-    await deleteDoc(deviceRef);
+    await Promise.race([
+      deleteDoc(deviceRef),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT')), 10000),
+      ),
+    ]);
     if (token === cachedToken) cachedToken = null;
     return { ok: true, data: undefined };
   } catch (err) {
@@ -349,8 +369,6 @@ export function addNotificationListeners(
   onReceived?: (notification: Notifications.Notification) => void,
   onResponse?: (response: Notifications.NotificationResponse) => void,
 ): () => void {
-  configureNotificationHandler();
-
   const receivedSub = onReceived
     ? Notifications.addNotificationReceivedListener(onReceived)
     : null;
@@ -359,11 +377,16 @@ export function addNotificationListeners(
     ? Notifications.addNotificationResponseReceivedListener(onResponse)
     : null;
 
-  // Cek jika aplikasi dibuka dari cold-start melalui interaksi notifikasi
+  // Cek jika aplikasi dibuka dari cold-start melalui interaksi notifikasi (dedupe jika sudah diproses)
   if (onResponse) {
     Notifications.getLastNotificationResponseAsync()
       .then((lastResponse) => {
         if (lastResponse) {
+          const id = lastResponse.notification.request.identifier;
+          if (id && id === lastHandledColdStartIdentifier) {
+            return;
+          }
+          lastHandledColdStartIdentifier = id;
           onResponse(lastResponse);
         }
       })
