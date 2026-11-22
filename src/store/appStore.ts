@@ -57,6 +57,16 @@ import { devWarn } from '@/services/devLog';
 import { isFirebaseReady } from '@/services/firebase';
 import { withWriteGuard } from '@/services/guard';
 import {
+  addNotificationListeners,
+  extractNotifPayload,
+  getDeviceToken as svcGetDeviceToken,
+  getNotifTargetRoute,
+  openNotificationSettings as svcOpenNotificationSettings,
+  removeDeviceToken as svcRemoveDeviceToken,
+  requestNotifPermission as svcRequestNotifPermission,
+  saveDeviceToken as svcSaveDeviceToken,
+} from '@/services/notifications';
+import {
   retrySync as syncRetrySync,
   startSync as syncStartSync,
   stopSync as syncStopSync,
@@ -76,6 +86,7 @@ import type {
   Lab,
   LocationStatus,
   LokasiPresensi,
+  NotifPayload,
   NotificationPermission,
   RegisterInput,
   Rekap,
@@ -274,7 +285,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
   initAuth: () => {
     return authObserveAuth((user) => {
+      const prevUser = get().currentUser;
       get().setCurrentUser(user);
+      if (user && !prevUser) {
+        // Pengguna masuk dari sesi tersimpan di perangkat (token diperbarui)
+        get().registerDevice().catch((err) => {
+          devWarn('initAuth-registerDevice', err);
+        });
+      }
     });
   },
 
@@ -289,6 +307,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const res = await authRegister(input);
     if (res.ok) {
       get().setCurrentUser(res.data);
+      get().registerDevice().catch((err) => {
+        devWarn('register-registerDevice', err);
+      });
     }
     return res;
   },
@@ -297,11 +318,24 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const res = await authLogin(email, password);
     if (res.ok) {
       get().setCurrentUser(res.data);
+      // Token diperbarui tiap login (FR-50, FR-54)
+      get().registerDevice().catch((err) => {
+        devWarn('login-registerDevice', err);
+      });
     }
     return res;
   },
 
   logout: async () => {
+    const user = get().currentUser;
+    if (user) {
+      // Hapus token perangkat saat logout (FR-50); jalankan sebelum signOut saat auth masih aktif
+      try {
+        await svcRemoveDeviceToken(user.id);
+      } catch (err) {
+        devWarn('logout-removeDeviceToken', err);
+      }
+    }
     const res = await authLogout();
     // Bila signOut gagal, sesi Firebase Auth masih aktif dan akun ini akan masuk lagi saat
     // aplikasi dibuka ulang; mengosongkan cache hanya membuat pengguna mengira sudah keluar.
@@ -527,7 +561,23 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   registerDevice: async () => {
-    set({ notifPermission: 'granted' });
+    const user = get().currentUser;
+    if (!user) return;
+
+    try {
+      // Minta izin notifikasi (dengan dialog penjelasan sebelum dialog sistem jika undetermined)
+      const perm = await svcRequestNotifPermission(true);
+      set({ notifPermission: perm });
+
+      if (perm === 'granted') {
+        const token = await svcGetDeviceToken();
+        if (token) {
+          await svcSaveDeviceToken(user.id, token);
+        }
+      }
+    } catch (err) {
+      devWarn('store-registerDevice', err);
+    }
   },
 
   submitAttendance: async (sessionId, code) => {
@@ -1212,3 +1262,38 @@ export function useTodaySessionsForAttendance(): {
 export function useNotifPermission(): NotificationPermission {
   return useAppStore((state) => state.notifPermission);
 }
+
+/**
+ * Hook untuk mendaftarkan listener notifikasi push (foreground banner dan respons tap).
+ * Mengarahkan navigasi ke rute tujuan berdasarkan payload notifikasi.
+ */
+export function useNotificationHandler(
+  onNavigate: (targetRoute: string, payload: NotifPayload) => void,
+): void {
+  useEffect(() => {
+    const unsubscribe = addNotificationListeners(
+      (notification) => {
+        devWarn('notif-received-foreground', notification.request.content.title);
+      },
+      (response) => {
+        const payload = extractNotifPayload(
+          response.notification.request.content.data,
+        );
+        if (!payload) return;
+        const user = useAppStore.getState().currentUser;
+        const route = getNotifTargetRoute(payload, user?.role);
+        onNavigate(route, payload);
+      },
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [onNavigate]);
+}
+
+export {
+  addNotificationListeners,
+  extractNotifPayload,
+  getNotifTargetRoute,
+  svcOpenNotificationSettings as openNotificationSettings,
+};
