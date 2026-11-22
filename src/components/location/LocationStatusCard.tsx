@@ -4,7 +4,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import type { ButtonProps } from '@/components/ui/Button';
 import { colors } from '@/theme/colors';
-import { radius, spacing } from '@/theme/spacing';
+import { layout, radius, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import type { LocationStatus } from '@/types';
 
@@ -101,7 +101,15 @@ export function LocationStatusCard({
   const { bg, text } = colors.feedback[visual.tone];
 
   return (
-    <View style={[styles.card, { backgroundColor: bg, borderColor: text }, style]}>
+    <View
+      aria-live="polite"
+      style={[
+        styles.card,
+        { backgroundColor: bg, borderColor: text },
+        { width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center' },
+        style,
+      ]}
+    >
       <Text style={[styles.title, { color: text }]}>{visual.title}</Text>
       <Text style={[styles.message, { color: text }]}>{visual.message}</Text>
       {status === 'ready' ? (
@@ -120,7 +128,13 @@ export function LocationStatusCard({
           </View>
         </View>
       ) : null}
-      {action ? <Button {...action} /> : null}
+      {action && status !== 'mocked' && status !== 'unavailable' ? (
+        <Button
+          {...action}
+          loading={status === 'checking' ? true : action.loading}
+          disabled={status === 'checking' ? true : action.disabled}
+        />
+      ) : null}
     </View>
   );
 }
