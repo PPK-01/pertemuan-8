@@ -43,13 +43,14 @@ export function Button({
 }: ButtonProps) {
   const inactive = disabled || loading;
   const color = disabled ? colors.disabled.text : textColor[variant];
+  const resolvedLabel = accessibilityLabel ?? label;
 
   return (
     <Pressable
       onPress={onPress}
       disabled={inactive}
       role="button"
-      aria-label={accessibilityLabel}
+      aria-label={resolvedLabel}
       aria-disabled={inactive}
       aria-busy={loading}
       style={({ pressed }) => [

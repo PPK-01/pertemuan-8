@@ -30,7 +30,13 @@ export function LabInfoSheet({
   const roundedJarak = jarakM != null ? Math.round(jarakM) : null;
 
   return (
-    <View style={[styles.panel, style]}>
+    <View
+      style={[
+        styles.panel,
+        { width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center' },
+        style,
+      ]}
+    >
       <Text style={styles.labName}>{lab?.nama ?? 'Lab belum diatur'}</Text>
       {lab?.gedung ? <Text style={styles.gedung}>{lab.gedung}</Text> : null}
       {roundedJarak != null ? (
@@ -74,15 +80,15 @@ function SessionInfoRow({ session, onPilihSesi }: SessionInfoRowProps) {
       style={({ pressed }) => [styles.row, pressed && onPilihSesi && { opacity: PRESSED_OPACITY }]}
     >
       <View style={styles.topLine}>
-        <Text style={styles.praktikum} numberOfLines={1}>
+        <Text style={styles.praktikum}>
           {session.praktikum}
         </Text>
         <StatusBadge status={session.status} />
       </View>
 
-      <Text style={styles.topik} numberOfLines={2}>
-        {session.topik}
-      </Text>
+        <Text style={styles.topik}>
+          {session.topik}
+        </Text>
 
       <View style={styles.metaRow}>
         <Text style={styles.metaLabel}>Kelas:</Text>

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import type { ButtonProps } from '@/components/ui/Button';
 import { colors } from '@/theme/colors';
-import { spacing } from '@/theme/spacing';
+import { layout, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 
 export type PermissionPromptAction = Pick<
@@ -39,7 +39,9 @@ export function PermissionPrompt({
   const primary = <Button {...primaryAction} style={actionStyle} />;
 
   return (
-    <Card style={style}>
+    <Card
+      style={[{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center' }, style]}
+    >
       <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.explanation}>{explanation}</Text>
