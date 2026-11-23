@@ -16,6 +16,12 @@ export default function PraktikanTabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="peta"
+        options={{
+          title: 'Peta',
+        }}
+      />
+      <Tabs.Screen
         name="izin"
         options={{
           title: 'Izin',
@@ -31,6 +37,7 @@ export default function PraktikanTabsLayout() {
         name="profil"
         options={{
           title: 'Profil',
+          href: null,
         }}
       />
     </Tabs>

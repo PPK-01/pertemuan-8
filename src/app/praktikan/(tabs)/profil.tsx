@@ -71,7 +71,17 @@ export default function PraktikanProfilScreen() {
 
   return (
     <View style={styles.container}>
-      <AppBar subtitle="Profil Saya" />
+      <AppBar
+        subtitle="Profil Saya"
+        canGoBack
+        onGoBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/praktikan/jadwal');
+          }
+        }}
+      />
 
       <Screen noPadding edges={['left', 'right']}>
         <View style={styles.scrollBody}>
