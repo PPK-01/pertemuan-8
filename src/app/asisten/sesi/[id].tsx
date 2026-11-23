@@ -25,6 +25,7 @@ import {
   useAppStore,
   useIsOnline,
   useIzinBySession,
+  useLabs,
   useRekap,
   useSessionById,
   useSyncState,
@@ -85,6 +86,8 @@ export default function AsistenDetailSesiScreen() {
   const izinList = useIzinBySession(sessionId);
   const isOnline = useIsOnline();
   const sessionsSync = useSyncState('sessions');
+  const labs = useLabs();
+  const labsSync = useSyncState('labs');
   const sessionsRetry = useSyncRetry(SESSIONS_SYNC_KEYS);
   const rekapRetry = useSyncRetry(REKAP_SYNC_KEYS);
   const openSession = useAppStore((state) => state.openSession);
@@ -103,6 +106,15 @@ export default function AsistenDetailSesiScreen() {
     setFeedbackState((prev) => ({ ...next, id: (prev?.id ?? 0) + 1 }));
 
   const currentStatus = session?.status ?? null;
+
+  const labId = session?.labId;
+  const activeLabName = useMemo(() => {
+    if (!labId) return undefined;
+    const found = labs.find((l) => l.id === labId);
+    if (found) return found.nama;
+    if (labsSync !== 'ready') return '';
+    return undefined;
+  }, [labId, labs, labsSync]);
 
   // Pesan sukses dari form ubah sesi, diambil saat layar ini kembali fokus setelah router.back().
   useFocusEffect(
@@ -240,7 +252,7 @@ export default function AsistenDetailSesiScreen() {
           ) : null}
 
           <Card>
-            <SessionInfo session={session} />
+            <SessionInfo session={session} labName={activeLabName} />
           </Card>
 
           {session.status !== 'closed' ? (

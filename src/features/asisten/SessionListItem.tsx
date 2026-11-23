@@ -6,9 +6,10 @@ import type { Session } from '@/types';
 
 export type SessionListItemProps = {
   session: Session;
+  labName?: string;
 };
 
-export function SessionListItem({ session }: SessionListItemProps) {
+export function SessionListItem({ session, labName }: SessionListItemProps) {
   const rekap = useRekap(session.id);
   const showAttendance =
     rekap !== null && (session.status === 'open' || session.status === 'closed');
@@ -19,6 +20,7 @@ export function SessionListItem({ session }: SessionListItemProps) {
   return (
     <SessionRow
       session={session}
+      labName={labName}
       onPress={() => router.push({ pathname: '/asisten/sesi/[id]', params: { id: session.id } })}
       footerText={footerText}
     />
