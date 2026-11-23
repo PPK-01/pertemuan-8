@@ -211,6 +211,12 @@ export async function getPosition(
 }
 
 /**
+ * Fungsi cleanup kosong bertanda khusus untuk menandai bahwa watcher tidak aktif berjalan
+ * (misalnya karena izin belum diberikan atau layanan lokasi mati).
+ */
+export const NOOP_WATCH_CLEANUP = Object.assign(() => {}, { isNoop: true as const });
+
+/**
  * Berlangganan perubahan posisi perangkat secara berkala di latar depan (foreground).
  * Memakai akurasi seimbang (Balanced), interval 5 detik atau 5 meter (NFR-13, NFR-18).
  * Mengembalikan fungsi cleanup untuk membatalkan langganan.
@@ -225,7 +231,7 @@ export async function watchPosition(
 
   if (Platform.OS === 'web' && (typeof navigator === 'undefined' || !navigator.geolocation)) {
     callback({ status: 'unavailable', position: null });
-    return () => {};
+    return NOOP_WATCH_CLEANUP;
   }
 
   const perm = await getPermission();
@@ -234,13 +240,13 @@ export async function watchPosition(
       status: perm.canAskAgain ? 'permission_denied' : 'permission_blocked',
       position: null,
     });
-    return () => {};
+    return NOOP_WATCH_CLEANUP;
   }
 
   const servicesOn = await isServicesEnabled();
   if (!servicesOn) {
     callback({ status: 'services_off', position: null });
-    return () => {};
+    return NOOP_WATCH_CLEANUP;
   }
 
   try {
@@ -277,6 +283,6 @@ export async function watchPosition(
   } catch (err) {
     devWarn('location-watchPosition', err);
     callback({ status: 'unavailable', position: null });
-    return () => {};
+    return NOOP_WATCH_CLEANUP;
   }
 }
