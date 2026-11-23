@@ -32,6 +32,7 @@ import {
   distanceM,
   getPermission as svcGetPermission,
   getPosition as svcGetPosition,
+  NOOP_WATCH_CLEANUP,
   openSettings as svcOpenLocationSettings,
   requestEnableServices as svcRequestEnableServices,
   requestPermission as svcRequestPermission,
@@ -550,6 +551,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         res.status === 'mocked';
       const position = isValidPos ? res.position : null;
       set({ location: { status: res.status, position } });
+      if (isValidPos) {
+        restartWatchIfActive();
+      }
       return res.status;
     } catch {
       if (epoch === locationEpoch) {
@@ -580,6 +584,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       const position = isValidPos ? res.position : null;
 
       set({ location: { status: res.status, position } });
+      if (isValidPos) {
+        restartWatchIfActive();
+      }
       return res.status;
     } catch {
       if (epoch === locationEpoch) {
@@ -606,7 +613,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       if (epoch !== locationEpoch) {
         return get().location.status;
       }
-      return await get().refreshLocation();
+      const st = await get().refreshLocation();
+      if (st === 'ready' || st === 'low_accuracy' || st === 'mocked') {
+        restartWatchIfActive();
+      }
+      return st;
     } catch {
       if (epoch === locationEpoch) {
         set({ location: { status: 'services_off', position: null } });
@@ -1178,6 +1189,9 @@ async function startGlobalWatch(
     if (currentEpoch !== watchEpoch || watchRefCount === 0 || AppState.currentState !== 'active') {
       cleanup();
       globalWatchCleanup = null;
+    } else if (cleanup === NOOP_WATCH_CLEANUP) {
+      // Tidak menandai watch aktif jika yang dikembalikan hanya cleanup kosong (izin belum ada / services off)
+      globalWatchCleanup = null;
     } else {
       globalWatchCleanup = cleanup;
     }
@@ -1185,6 +1199,12 @@ async function startGlobalWatch(
     devWarn('location-watch', err);
   } finally {
     isWatchingStarting = false;
+  }
+}
+
+function restartWatchIfActive() {
+  if (watchRefCount > 0 && !globalWatchCleanup && AppState.currentState === 'active') {
+    void startGlobalWatch(useAppStore.setState);
   }
 }
 
@@ -1272,7 +1292,7 @@ export function useWatchPosition(enabled: boolean): void {
     if (!enabled) return;
 
     watchRefCount++;
-    if (watchRefCount === 1 && AppState.currentState === 'active') {
+    if (!globalWatchCleanup && AppState.currentState === 'active') {
       void startGlobalWatch(useAppStore.setState);
     }
 
