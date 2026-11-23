@@ -72,7 +72,7 @@ export default function JadwalScreen() {
   }, [currentUser]);
 
   function handleOpenProfile() {
-    router.push('/praktikan/profil' as any);
+    router.push('/praktikan/profil');
   }
 
   async function handleLogout() {

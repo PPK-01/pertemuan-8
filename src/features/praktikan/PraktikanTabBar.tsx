@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Href, router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -88,7 +88,7 @@ export function PraktikanTabBar(props: TabBarProps) {
   const hasOpenSession = todaySessions.some((item) => item.canAttend);
 
   function handleCenterPress() {
-    router.push('/praktikan/presensi' as any);
+    router.push('/praktikan/presensi');
   }
 
   function handleNavigate(tabName: PraktikanTabName) {
@@ -98,12 +98,14 @@ export function PraktikanTabBar(props: TabBarProps) {
     } else if (props.navigation) {
       props.navigation.navigate(tabName);
     } else {
-      router.push(`/praktikan/${tabName}` as any);
+      router.push(`/praktikan/${tabName}` as Href);
     }
   }
 
   function renderTab(tabName: PraktikanTabName, label: string, ariaLabel: string) {
     const route = state.routes.find((r) => r.name === tabName);
+    if (!route) return null;
+
     const isFocused = state.routes[state.index]?.name === tabName;
     const tintColor = isFocused ? colors.primary : colors.textMuted;
 
