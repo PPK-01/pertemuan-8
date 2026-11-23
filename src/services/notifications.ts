@@ -314,7 +314,12 @@ export async function getDeviceTokensForUser(uid: string): Promise<string[]> {
 
   try {
     const devicesCol = collection(db, 'users', uid, 'devices');
-    const snap = await getDocs(devicesCol);
+    const snap = await Promise.race([
+      getDocs(devicesCol),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT')), 10000),
+      ),
+    ]);
     const tokens: string[] = [];
     snap.forEach((docSnap) => {
       const data = docSnap.data();

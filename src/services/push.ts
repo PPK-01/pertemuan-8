@@ -44,6 +44,9 @@ export async function sendPush(messages: PushMessage[]): Promise<string[]> {
 
   for (let i = 0; i < messages.length; i += MAX_BATCH_SIZE) {
     const chunk = messages.slice(i, i + MAX_BATCH_SIZE);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     try {
       const response = await fetch(EXPO_PUSH_URL, {
         method: 'POST',
@@ -53,6 +56,7 @@ export async function sendPush(messages: PushMessage[]): Promise<string[]> {
           'Accept-Encoding': 'gzip, deflate',
         },
         body: JSON.stringify(chunk),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -72,8 +76,10 @@ export async function sendPush(messages: PushMessage[]): Promise<string[]> {
         resData.data.forEach((ticket, idx) => {
           if (ticket.status === 'error') {
             const token = chunk[idx]?.to;
-            if (token) {
+            if (token && ticket.details?.error === 'DeviceNotRegistered') {
               rejectedTokens.push(token);
+              devWarn('push-ticketError', `${token}: DeviceNotRegistered`);
+            } else if (token) {
               devWarn('push-ticketError', `${token}: ${ticket.message || ticket.details?.error}`);
             }
           }
@@ -81,6 +87,8 @@ export async function sendPush(messages: PushMessage[]): Promise<string[]> {
       }
     } catch (err) {
       devWarn('push-sendPushNetworkError', err);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -170,7 +178,7 @@ export async function notifySessionCreated(
   const scheduleStr = formatSessionSchedule(session.startAt);
 
   const title = 'Jadwal baru';
-  const body = `${session.praktikum}: ${scheduleStr} di ${labName}`;
+  const body = `${session.praktikum}: ${scheduleStr} di ${labName}.`;
   const payload: NotifPayload = { type: 'session_created', sessionId: session.id };
 
   await sendNotificationToUsers(praktikanUids, title, body, payload);
@@ -189,10 +197,11 @@ export async function notifyIzinDecided(
   if (!praktikanUid) return;
 
   const praktikumName = session?.praktikum || 'Praktikum';
+  const tanggalStr = session?.startAt ? formatDate(session.startAt) : formatDate(izin.createdAt);
   const keputusanText = keputusan === 'approved' ? 'disetujui' : 'ditolak';
 
   const title = `Izin ${keputusanText}`;
-  const body = `Permohonan izin sesi ${praktikumName} ${keputusanText}.`;
+  const body = `untuk ${praktikumName} ${tanggalStr}.`;
   const payload: NotifPayload = { type: 'izin_decided', izinId: izin.id };
 
   await sendNotificationToUsers([praktikanUid], title, body, payload);
@@ -213,8 +222,8 @@ export async function notifyLocationChanged(
 
   if (praktikanUids.length === 0) return;
 
-  const title = 'Perubahan lokasi';
-  const body = `Lokasi sesi ${session.praktikum} dipindah ke ${labName}.`;
+  const title = 'Lokasi praktikum berubah';
+  const body = `${session.praktikum} kini di ${labName}.`;
   const payload: NotifPayload = { type: 'location_changed', sessionId: session.id };
 
   await sendNotificationToUsers(praktikanUids, title, body, payload);
