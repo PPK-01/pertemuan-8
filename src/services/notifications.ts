@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Alert, Linking, Platform } from 'react-native';
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import type { NotifPayload, NotificationPermission, Result, Role } from '@/types';
 import { db, isFirebaseReady } from './firebase';
@@ -293,6 +293,44 @@ export async function removeDeviceToken(
       code: 'UNKNOWN',
       message: 'Gagal menghapus token perangkat',
     };
+  }
+}
+
+/**
+ * Mengambil seluruh token perangkat aktif milik seorang pengguna dari users/{uid}/devices.
+ */
+export async function getDeviceTokensForUser(uid: string): Promise<string[]> {
+  if (!uid) return [];
+
+  if (!isFirebaseReady || !db) {
+    const tokens: string[] = [];
+    for (const [key, val] of inMemoryDevices.entries()) {
+      if (key.startsWith(`${uid}_`) && val.token) {
+        tokens.push(val.token);
+      }
+    }
+    return tokens;
+  }
+
+  try {
+    const devicesCol = collection(db, 'users', uid, 'devices');
+    const snap = await Promise.race([
+      getDocs(devicesCol),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT')), 10000),
+      ),
+    ]);
+    const tokens: string[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && typeof data.token === 'string' && data.token.length > 0) {
+        tokens.push(data.token);
+      }
+    });
+    return tokens;
+  } catch (err) {
+    devWarn('notif-getDeviceTokensForUser', err);
+    return [];
   }
 }
 

@@ -67,6 +67,12 @@ import {
   saveDeviceToken as svcSaveDeviceToken,
 } from '@/services/notifications';
 import {
+  notifyIzinDecided,
+  notifyLocationChanged,
+  notifySessionCreated,
+  notifySessionOpened,
+} from '@/services/push';
+import {
   retrySync as syncRetrySync,
   startSync as syncStartSync,
   stopSync as syncStopSync,
@@ -362,11 +368,34 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }
     // Dengan id, service membaca dokumen lebih dulu untuk tulis yang sudah tersimpan tetapi
     // belum sampai ke cache.
-    return withWriteGuard(() => svcCreateSession({ ...input, id }));
+    const res = await withWriteGuard(() => svcCreateSession({ ...input, id }));
+    if (res.ok) {
+      // N2: Notifikasi jadwal baru ke praktikan kelas sesi
+      notifySessionCreated(res.data, get().users, get().labs).catch((err) => {
+        devWarn('notify-createSession', err);
+      });
+    }
+    return res;
   },
 
   updateSession: async (id, patch) => {
-    return withWriteGuard(() => svcUpdateSession(id, patch));
+    const oldSession = get().sessions.find((s) => s.id === id);
+    const labChanged =
+      oldSession &&
+      oldSession.status !== 'closed' &&
+      patch.labId !== undefined &&
+      patch.labId !== oldSession.labId;
+
+    const res = await withWriteGuard(() => svcUpdateSession(id, patch));
+    if (res.ok && labChanged && oldSession) {
+      // N4: labId sesi yang belum Ditutup berubah
+      const newLab = patch.labId ? get().labs.find((l) => l.id === patch.labId) : null;
+      const labName = newLab?.nama || 'Lab';
+      notifyLocationChanged(oldSession, get().users, labName).catch((err) => {
+        devWarn('notify-updateSession', err);
+      });
+    }
+    return res;
   },
 
   deleteSession: async (id) => {
@@ -386,7 +415,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
             : 'Sesi sudah ditutup dan tidak dapat dibuka kembali',
       };
     }
-    return withWriteGuard(() => svcSetStatus(id, 'open'));
+    const res = await withWriteGuard(() => svcSetStatus(id, 'open'));
+    if (res.ok) {
+      // N1: Status sesi scheduled -> open ke praktikan kelas sesi
+      const currentSession = get().sessions.find((s) => s.id === id) || session;
+      if (currentSession) {
+        notifySessionOpened(currentSession, get().users, get().labs).catch((err) => {
+          devWarn('notify-openSession', err);
+        });
+      }
+    }
+    return res;
   },
 
   closeSession: async (id) => {
@@ -431,7 +470,28 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     if (!user) {
       return { ok: false, code: 'PERMISSION_DENIED', message: 'Harap masuk terlebih dahulu' };
     }
-    return withWriteGuard(() => svcUpdateLab(id, patch, user));
+
+    const oldLab = get().labs.find((l) => l.id === id);
+    const nameChanged = patch.nama !== undefined && patch.nama !== oldLab?.nama;
+    const coordChanged =
+      (patch.lat !== undefined && patch.lat !== oldLab?.lat) ||
+      (patch.lng !== undefined && patch.lng !== oldLab?.lng);
+    const labLocationChanged = nameChanged || coordChanged;
+
+    const res = await withWriteGuard(() => svcUpdateLab(id, patch, user));
+    if (res.ok && labLocationChanged) {
+      // N4: Nama/koordinat lab yang dipakai sesi yang belum Ditutup berubah
+      const affectedSessions = get().sessions.filter(
+        (s) => s.labId === id && s.status !== 'closed',
+      );
+      const newLabName = patch.nama || oldLab?.nama || 'Lab';
+      for (const s of affectedSessions) {
+        notifyLocationChanged(s, get().users, newLabName).catch((err) => {
+          devWarn('notify-updateLab', err);
+        });
+      }
+    }
+    return res;
   },
 
   deleteLab: async (id) => {
@@ -725,9 +785,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
   reviewIzin: async (izinId, keputusan, catatan) => {
     const user = get().currentUser;
-    return withWriteGuard(() =>
+    const izin = get().izinList.find((i) => i.id === izinId);
+
+    const res = await withWriteGuard(() =>
       svcReviewIzin(izinId, user?.id ?? '', keputusan, catatan),
     );
+    if (res.ok && izin) {
+      // N3: Status izin approved / rejected ke praktikan pengaju
+      const session = get().sessions.find((s) => s.id === izin.sessionId);
+      notifyIzinDecided(izin, session, keputusan).catch((err) => {
+        devWarn('notify-reviewIzin', err);
+      });
+    }
+    return res;
   },
 }));
 
