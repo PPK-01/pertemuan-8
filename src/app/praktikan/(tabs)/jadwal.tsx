@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SessionRow } from '@/components/session/SessionRow';
 import { AppBar } from '@/components/ui/AppBar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IdentityCard } from '@/components/ui/IdentityCard';
 import { LoadingState } from '@/components/ui/LoadingState';
+import { PRESSED_OPACITY } from '@/components/ui/pressable';
 import { Screen } from '@/components/ui/Screen';
 import { SyncErrorState } from '@/components/ui/SyncErrorState';
 import { useSyncRetry } from '@/features/asisten/useSyncRetry';
@@ -19,7 +20,7 @@ import {
   useSyncState,
 } from '@/store/appStore';
 import { colors } from '@/theme/colors';
-import { radius, spacing } from '@/theme/spacing';
+import { layout, radius, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 
 const JADWAL_SYNC_KEYS = ['sessions'] as const;
@@ -62,6 +63,18 @@ export default function JadwalScreen() {
     [sessions, attendedSessionIds, approvedIzinSessionIds],
   );
 
+  const userInitials = useMemo(() => {
+    if (!currentUser?.name) return '?';
+    const parts = currentUser.name.trim().split(/\s+/);
+    if (parts.length === 0 || !parts[0]) return '?';
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+  }, [currentUser]);
+
+  function handleOpenProfile() {
+    router.push('/praktikan/profil' as any);
+  }
+
   async function handleLogout() {
     await logout();
     router.replace('/(auth)/login');
@@ -84,7 +97,24 @@ export default function JadwalScreen() {
 
   return (
     <View style={styles.container}>
-      <AppBar subtitle="Jadwal Praktikum" />
+      <AppBar
+        subtitle="Jadwal Praktikum"
+        rightAction={
+          <Pressable
+            onPress={handleOpenProfile}
+            role="button"
+            aria-label="Profil praktikan"
+            style={({ pressed }) => [
+              styles.avatarButton,
+              pressed && { opacity: PRESSED_OPACITY },
+            ]}
+          >
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarText}>{userInitials}</Text>
+            </View>
+          </Pressable>
+        }
+      />
 
       <Screen scroll={false} edges={['left', 'right']} noPadding>
         <View style={styles.screenInner}>
@@ -218,5 +248,26 @@ const styles = StyleSheet.create({
     color: colors.status.open.text,
     fontWeight: '600',
     flex: 1,
+  },
+  avatarButton: {
+    minWidth: layout.minTouch,
+    minHeight: layout.minTouch,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.full,
+    backgroundColor: colors.onPrimarySubtle,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.onPrimary,
   },
 });

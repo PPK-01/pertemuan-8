@@ -1,11 +1,9 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BottomSheet } from '@/components/ui/BottomSheet';
 import { PRESSED_OPACITY } from '@/components/ui/pressable';
-import { useAppStore, useCurrentUser, useSessionsForUser } from '@/store/appStore';
+import { useTodaySessionsForAttendance } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { layout, radius, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -21,6 +19,8 @@ type TabBarProps = {
   navigateToTab?: (key: string) => void;
 };
 
+type PraktikanTabName = 'jadwal' | 'peta' | 'izin' | 'riwayat';
+
 function CalendarIcon({ color }: { color: string }) {
   return (
     <View style={styles.iconFrame}>
@@ -31,6 +31,17 @@ function CalendarIcon({ color }: { color: string }) {
           <View style={[styles.calendarDot, { backgroundColor: color }]} />
         </View>
       </View>
+    </View>
+  );
+}
+
+function MapIcon({ color }: { color: string }) {
+  return (
+    <View style={styles.iconFrame}>
+      <View style={[styles.mapPinHead, { borderColor: color }]}>
+        <View style={[styles.mapPinDot, { backgroundColor: color }]} />
+      </View>
+      <View style={[styles.mapPinPoint, { borderTopColor: color }]} />
     </View>
   );
 }
@@ -57,15 +68,6 @@ function ClockIcon({ color }: { color: string }) {
   );
 }
 
-function UserIcon({ color }: { color: string }) {
-  return (
-    <View style={styles.iconFrame}>
-      <View style={[styles.userHead, { borderColor: color }]} />
-      <View style={[styles.userBody, { borderColor: color }]} />
-    </View>
-  );
-}
-
 function KeyCodeIcon() {
   return (
     <View style={styles.keyIconFrame}>
@@ -82,185 +84,98 @@ function KeyCodeIcon() {
 export function PraktikanTabBar(props: TabBarProps) {
   const { state } = props;
   const insets = useSafeAreaInsets();
-  const currentUser = useCurrentUser();
-  const sessions = useSessionsForUser(currentUser?.id ?? '');
-  const [sheetVisible, setSheetVisible] = useState(false);
+  const todaySessions = useTodaySessionsForAttendance();
+  const hasOpenSession = todaySessions.some((item) => item.canAttend);
 
   function handleCenterPress() {
-    const openSession = sessions.find((s) => s.status === 'open');
-    if (openSession) {
-      router.push({
-        pathname: '/praktikan/sesi/[id]',
-        params: { id: openSession.id },
-      });
-    } else {
-      setSheetVisible(true);
-    }
+    router.push('/praktikan/presensi' as any);
   }
 
-  function handleNavigate(route: { key: string; name: string }) {
-    if (props.navigateToTab) {
+  function handleNavigate(tabName: PraktikanTabName) {
+    const route = state.routes.find((r) => r.name === tabName);
+    if (route && props.navigateToTab) {
       props.navigateToTab(route.key);
     } else if (props.navigation) {
-      props.navigation.navigate(route.name);
+      props.navigation.navigate(tabName);
     } else {
-      if (route.name === 'jadwal') router.push('/praktikan/jadwal');
-      else if (route.name === 'izin') router.push('/praktikan/izin');
-      else if (route.name === 'riwayat') router.push('/praktikan/riwayat');
-      else router.push('/praktikan/profil' as any);
+      router.push(`/praktikan/${tabName}` as any);
     }
   }
 
-  return (
-    <>
-      <View style={[styles.barContainer, { paddingBottom: Math.max(insets.bottom, spacing.xs) }]}>
-        {/* Tab 1: Jadwal */}
-        {(() => {
-          const route = state.routes.find((r) => r.name === 'jadwal');
-          if (!route) return null;
-          const isFocused = state.routes[state.index]?.name === 'jadwal';
-          const tintColor = isFocused ? colors.primary : colors.textMuted;
+  function renderTab(tabName: PraktikanTabName, label: string, ariaLabel: string) {
+    const route = state.routes.find((r) => r.name === tabName);
+    const isFocused = state.routes[state.index]?.name === tabName;
+    const tintColor = isFocused ? colors.primary : colors.textMuted;
 
-          return (
-            <Pressable
-              key={route.key}
-              onPress={() => !isFocused && handleNavigate(route)}
-              role="tab"
-              aria-selected={isFocused}
-              aria-label="Jadwal praktikum"
-              style={({ pressed }) => [
-                styles.tabItem,
-                pressed && { opacity: PRESSED_OPACITY },
-              ]}
-            >
-              <View style={[styles.iconPill, isFocused && styles.iconPillActive]}>
-                <CalendarIcon color={tintColor} />
-              </View>
-              <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-                Jadwal
-              </Text>
-            </Pressable>
-          );
-        })()}
+    let icon = <CalendarIcon color={tintColor} />;
+    if (tabName === 'peta') {
+      icon = <MapIcon color={tintColor} />;
+    } else if (tabName === 'izin') {
+      icon = <DocumentIcon color={tintColor} />;
+    } else if (tabName === 'riwayat') {
+      icon = <ClockIcon color={tintColor} />;
+    }
 
-        {/* Tab 2: Izin (BARU Sprint 2) */}
-        {(() => {
-          const route = state.routes.find((r) => r.name === 'izin');
-          if (!route) return null;
-          const isFocused = state.routes[state.index]?.name === 'izin';
-          const tintColor = isFocused ? colors.primary : colors.textMuted;
-
-          return (
-            <Pressable
-              key={route.key}
-              onPress={() => !isFocused && handleNavigate(route)}
-              role="tab"
-              aria-selected={isFocused}
-              aria-label="Pengajuan izin"
-              style={({ pressed }) => [
-                styles.tabItem,
-                pressed && { opacity: PRESSED_OPACITY },
-              ]}
-            >
-              <View style={[styles.iconPill, isFocused && styles.iconPillActive]}>
-                <DocumentIcon color={tintColor} />
-              </View>
-              <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-                Izin
-              </Text>
-            </Pressable>
-          );
-        })()}
-
-        {/* Tombol Bulat Tengah: Isi Kode */}
-        <Pressable
-          onPress={handleCenterPress}
-          role="button"
-          aria-label="Isi kode sesi praktikum"
-          style={({ pressed }) => [
-            styles.centerButtonWrapper,
-            pressed && { opacity: PRESSED_OPACITY },
-          ]}
-        >
-          <View style={styles.centerButtonCircle}>
-            <KeyCodeIcon />
-          </View>
-          <Text style={styles.centerButtonLabel}>Isi kode</Text>
-        </Pressable>
-
-        {/* Tab 3: Riwayat */}
-        {(() => {
-          const route = state.routes.find((r) => r.name === 'riwayat');
-          if (!route) return null;
-          const isFocused = state.routes[state.index]?.name === 'riwayat';
-          const tintColor = isFocused ? colors.primary : colors.textMuted;
-
-          return (
-            <Pressable
-              key={route.key}
-              onPress={() => !isFocused && handleNavigate(route)}
-              role="tab"
-              aria-selected={isFocused}
-              aria-label="Riwayat presensi"
-              style={({ pressed }) => [
-                styles.tabItem,
-                pressed && { opacity: PRESSED_OPACITY },
-              ]}
-            >
-              <View style={[styles.iconPill, isFocused && styles.iconPillActive]}>
-                <ClockIcon color={tintColor} />
-              </View>
-              <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-                Riwayat
-              </Text>
-            </Pressable>
-          );
-        })()}
-
-        {/* Tab 4: Profil */}
-        {(() => {
-          const route = state.routes.find((r) => r.name === 'profil');
-          if (!route) return null;
-          const isFocused = state.routes[state.index]?.name === 'profil';
-          const tintColor = isFocused ? colors.primary : colors.textMuted;
-
-          return (
-            <Pressable
-              key={route.key}
-              onPress={() => !isFocused && handleNavigate(route)}
-              role="tab"
-              aria-selected={isFocused}
-              aria-label="Profil praktikan"
-              style={({ pressed }) => [
-                styles.tabItem,
-                pressed && { opacity: PRESSED_OPACITY },
-              ]}
-            >
-              <View style={[styles.iconPill, isFocused && styles.iconPillActive]}>
-                <UserIcon color={tintColor} />
-              </View>
-              <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-                Profil
-              </Text>
-            </Pressable>
-          );
-        })()}
-      </View>
-
-      <BottomSheet
-        visible={sheetVisible}
-        onClose={() => setSheetVisible(false)}
-        title="Belum ada sesi yang dibuka"
-        primaryAction={{
-          label: 'Tutup',
-          onPress: () => setSheetVisible(false),
-        }}
+    return (
+      <Pressable
+        key={route?.key ?? tabName}
+        onPress={() => !isFocused && handleNavigate(tabName)}
+        role="tab"
+        aria-selected={isFocused}
+        aria-label={ariaLabel}
+        style={({ pressed }) => [
+          styles.tabItem,
+          pressed && { opacity: PRESSED_OPACITY },
+        ]}
       >
-        <Text style={styles.sheetBody}>
-          Belum ada sesi praktikum kelasmu yang sedang dibuka saat ini. Silakan periksa tab Jadwal.
+        <View style={[styles.iconPill, isFocused && styles.iconPillActive]}>
+          {icon}
+        </View>
+        <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
+          {label}
         </Text>
-      </BottomSheet>
-    </>
+      </Pressable>
+    );
+  }
+
+  const centerAriaLabel = hasOpenSession ? 'Presensi, ada sesi dibuka' : 'Presensi';
+
+  return (
+    <View style={[styles.barContainer, { paddingBottom: Math.max(insets.bottom, spacing.xs) }]}>
+      {/* Tab 1: Jadwal */}
+      {renderTab('jadwal', 'Jadwal', 'Jadwal praktikum')}
+
+      {/* Tab 2: Peta (I-06) */}
+      {renderTab('peta', 'Peta', 'Peta laboratorium')}
+
+      {/* Tombol Bulat Tengah: Presensi */}
+      <Pressable
+        onPress={handleCenterPress}
+        role="button"
+        aria-label={centerAriaLabel}
+        accessibilityLabel={centerAriaLabel}
+        style={({ pressed }) => [
+          styles.centerButtonWrapper,
+          pressed && { opacity: PRESSED_OPACITY },
+        ]}
+      >
+        <View style={styles.centerButtonCircle}>
+          <KeyCodeIcon />
+          {hasOpenSession ? (
+            <View style={styles.openSessionBadge}>
+              <View style={styles.openSessionBadgeInner} />
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.centerButtonLabel}>Presensi</Text>
+      </Pressable>
+
+      {/* Tab 3: Izin */}
+      {renderTab('izin', 'Izin', 'Pengajuan izin')}
+
+      {/* Tab 4: Riwayat */}
+      {renderTab('riwayat', 'Riwayat', 'Riwayat presensi')}
+    </View>
   );
 }
 
@@ -273,13 +188,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: spacing.xs,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: layout.minTouch,
+    minWidth: 44,
     gap: 2,
   },
   iconPill: {
@@ -304,6 +220,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: -spacing.lg,
     paddingHorizontal: spacing.xs,
+    minHeight: layout.minTouch,
+    minWidth: 48,
   },
   centerButtonCircle: {
     width: 48,
@@ -314,6 +232,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: colors.surface,
+    position: 'relative',
   },
   centerButtonLabel: {
     ...typography.caption,
@@ -321,6 +240,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
     marginTop: 2,
+  },
+  openSessionBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.accent,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openSessionBadgeInner: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.surface,
   },
   iconFrame: {
     width: 22,
@@ -349,6 +287,29 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1,
+  },
+  mapPinHead: {
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapPinDot: {
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 1.75,
+  },
+  mapPinPoint: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderTopWidth: 4,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    marginTop: -0.5,
   },
   docBody: {
     width: 16,
@@ -389,21 +350,6 @@ const styles = StyleSheet.create({
     height: 1.5,
     right: 4,
   },
-  userHead: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    marginBottom: 1,
-  },
-  userBody: {
-    width: 15,
-    height: 7,
-    borderTopLeftRadius: 5,
-    borderTopRightRadius: 5,
-    borderWidth: 1.5,
-    borderBottomWidth: 0,
-  },
   keyIconFrame: {
     width: 20,
     height: 20,
@@ -429,9 +375,5 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: colors.onPrimary,
     opacity: 0.7,
-  },
-  sheetBody: {
-    ...typography.body,
-    color: colors.text,
   },
 });
