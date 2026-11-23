@@ -103,23 +103,34 @@ Untuk mendeploy rules:
 firebase deploy --only firestore:rules
 ```
 
-### 6.1 Bukti Uji 9 Kasus Keamanan Rules (DoD & SRS §6.5)
+### 6.1 Bukti Uji 14 Kasus Keamanan Rules (DoD & SRS §6.5 Sprint 3)
 
-Pengujian aturan keamanan Cloud Firestore (`firestore.rules`) diverifikasi menggunakan Rules Playground di Firebase Console dan Firebase Local Emulator (`@firebase/rules-unit-testing`). Semua skenario menerapkan prinsip *deny-by-default*.
+Pengujian aturan keamanan Cloud Firestore (`firestore.rules`) diverifikasi menggunakan Rules Playground di Firebase Console, verifikasi live deployment (D-03, D-05, D-06), dan pengujian unit rules. Seluruh pengujian menerapkan prinsip *deny-by-default*, validasi skema ketat (`hasOnly`, `hasAll`), serta pembatasan peran (`isAsisten`, `isPraktikan`, pemilik data).
 
-| No | Kasus Uji Keamanan (SRS §6.5) | Konteks Pengguna (Auth Context) | Operasi Target & Koleksi | Hasil Aturan | Status |
-| :-: | :--- | :--- | :--- | :--- | :---: |
-| 1 | Praktikan tidak dapat membuat, mengubah, atau menghapus sesi | `auth.uid = 'bagas_id'` (role: praktikan) | `create`/`update`/`delete` pada `/sessions/{sid}` | **DENIED** (hanya asisten yang memiliki hak tulis sesi) | **PASS** |
-| 2 | Praktikan tidak dapat membaca `private/code` maupun sesi kelas lain | `auth.uid = 'bagas_id'` (role: praktikan, kelas: A) | `get` pada `/sessions/{sid}/private/code` dan sesi dengan `kelas: 'B'` | **DENIED** (subdokumen privat hanya untuk asisten, sesi kelas lain diblokir) | **PASS** |
-| 3 | Presensi kode benar berhasil; kode salah ditolak; presensi kedua ditolak | `auth.uid = 'bagas_id'` (role: praktikan, kelas: A) | `create` pada `/attendances/{sid}_bagas_id` (uji kode cocok vs salah vs duplikat ID) | **ALLOWED** untuk kode valid pertama; **DENIED** untuk kode salah & penulisan ulang | **PASS** |
-| 4 | Presensi sesi dijadwalkan/ditutup, atas nama uid lain, atau izin disetujui ditolak | `auth.uid = 'bagas_id'` | `create` pada `/attendances/{sid}_{uid}` saat sesi status != 'open', atau beda uid, atau izin approved | **DENIED** (aturan memvalidasi status open, `aid == sessionId_uid`, dan negasi izin) | **PASS** |
-| 5 | Praktikan tidak dapat membaca izin atau presensi praktikan lain | `auth.uid = 'bagas_id'` (role: praktikan) | `get`/`list` pada `/attendances/{sid}_citra` atau `/izin/{sid}_citra` | **DENIED** (praktikan hanya diizinkan membaca dokumen miliknya sendiri) | **PASS** |
-| 6 | Praktikan tidak dapat menulis `review` atau mengubah status izin menjadi `approved` | `auth.uid = 'bagas_id'` (role: praktikan) | `update` pada `/izin/{iid}` mengubah status ke `approved` / menyertakan field `review` | **DENIED** (transisi status final dan penulisan review hanya diizinkan untuk asisten) | **PASS** |
-| 7 | Registrasi asisten tanpa kode undangan benar ditolak; peran & kelas tidak dapat diubah | `auth.uid = 'asisten_baru'` (role: asisten) | `create` pada `/users/{uid}` dengan inviteCode salah, atau `update` field role/kelas | **DENIED** (kode dicocokkan ke `/config/asisten`; update hanya diizinkan untuk field `name`) | **PASS** |
-| 8 | Asisten tidak dapat menghapus sesi bukan Dijadwalkan atau melompati transisi status | `auth.uid = 'dina_id'` (role: asisten) | `delete` sesi status `open`/`closed`, atau update status langsung `scheduled` -> `closed` | **DENIED** (delete dibatasi status `scheduled`; update status harus mengikuti alur bertahap) | **PASS** |
-| 9 | Pengguna belum login (unauthenticated) ditolak di semua koleksi kecuali baca `kelasPraktikum` | `request.auth = null` (tamu / anonim) | `read`/`write` di `/sessions`, `/users`, `/attendances`, `/izin`, dan `/config` | **DENIED** untuk seluruh koleksi operasional; `read` **ALLOWED** hanya pada `/kelasPraktikum` | **PASS** |
+| Nomor Kasus | Skenario | Hasil yang Diharapkan | Hasil Aktual | Status |
+| :-: | :--- | :--- | :--- | :-: |
+| 1 | Praktikan mencoba membuat, mengubah, atau menghapus sesi praktikum (`/sessions/{sid}`) | Ditolak (hanya asisten yang memiliki hak tulis sesi) | DENIED | PASS |
+| 2 | Praktikan membaca subdokumen kode privat (`/sessions/{sid}/private/code`) atau sesi kelas lain | Ditolak (subdokumen privat hanya untuk asisten, sesi kelas lain diblokir) | DENIED | PASS |
+| 3 | Presensi pada sesi Dibuka: kode benar vs kode salah vs presensi kedua kali (duplikat ID) | Kode benar diterima; kode salah ditolak; presensi kedua ditolak | ALLOWED (benar) / DENIED (salah & duplikat) | PASS |
+| 4 | Presensi pada sesi Dijadwalkan atau Ditutup, atas nama UID lain, atau izin disetujui | Ditolak (hanya sesi open, UID cocok, dan izin belum disetujui) | DENIED | PASS |
+| 5 | Praktikan membaca rekaman presensi atau pengajuan izin praktikan lain | Ditolak (praktikan hanya diizinkan membaca dokumen miliknya sendiri) | DENIED | PASS |
+| 6 | Praktikan mencoba menulis review izin atau mengubah status izin menjadi `approved` | Ditolak (transisi status dan penulisan review hanya diizinkan untuk asisten) | DENIED | PASS |
+| 7 | Registrasi asisten tanpa kode undangan valid, atau mengubah field `role`/`kelas` akun | Ditolak (kode undangan diverifikasi ke `/config/asisten`, role/kelas tidak boleh diubah) | DENIED | PASS |
+| 8 | Asisten menghapus sesi yang berstatus bukan Dijadwalkan (`open`/`closed`), atau lompat status | Ditolak (penghapusan hanya untuk status `scheduled`, transisi status harus bertahap) | DENIED | PASS |
+| 9 | Pengguna belum login (tamu) mengakses koleksi operasional (`sessions`, `users`, `attendances`, dll.) | Ditolak di semua koleksi operasional; baca diizinkan hanya pada `/kelasPraktikum` | DENIED (operasional) / ALLOWED (`kelasPraktikum`) | PASS |
+| 10 | Asisten membuat/mengubah data lab valid; Praktikan mencoba menulis data lab | Asisten diizinkan; Praktikan ditolak (hanya asisten yang dapat mengelola koleksi lab) | Asisten ALLOWED / Praktikan DENIED | PASS |
+| 11 | Pembuatan/pembaruan lab dengan radius di luar rentang 10–200 m, atau koordinat lat/lng tidak valid | Ditolak (radiusM wajib integer 10–200, lat -90 s.d. 90, lng -180 s.d. 180) | DENIED | PASS |
+| 12 | Pembuatan sesi baru tanpa `labId` atau dengan `labId` yang tidak terdaftar di koleksi `labs` | Ditolak (`exists(/databases/$(db)/documents/labs/$(labId))` bernilai false) | DENIED | PASS |
+| 13 | Presensi lokasi: `jarakM` > radius, `akurasiM` > 50, `mocked` = true, atau `labId` berbeda dari sesi | Ditolak jika jarak/akurasi/mocked/labId tidak sesuai; Bukti valid diterima | ALLOWED (bukti valid) / DENIED (pelanggaran lokasi) | PASS |
+| 14 | Manajemen devices (`/users/{uid}/devices`): praktikan membaca token pengguna lain; asisten membaca/mengubah token orang lain | Praktikan dilarang membaca token lain; Asisten diizinkan membaca & menghapus tetapi dilarang membuat/mengubah token orang lain; Pemilik diizinkan kelola tokennya sendiri (token <= 200, platform android/ios) | Sesuai aturan (Praktikan lain DENIED, Asisten baca/hapus ALLOWED, Asisten create/update DENIED, Pemilik ALLOWED) | PASS |
 
-> **Ringkasan DoD Security:** 9 dari 9 kasus pengujian aturan keamanan Cloud Firestore dinyatakan **LULUS (100% PASS)**.
+> **Ringkasan DoD Security Sprint 3:** Seluruh 14 kasus pengujian aturan keamanan Cloud Firestore dinyatakan **LULUS (100% PASS)** tanpa celah keamanan (*zero security vulnerability*).
+
+### 6.2 Ringkasan Cek Singkat Live Deployment (Sprint 3)
+1. **D-03 (Lab & Sesi)**: `deleteLab` memverifikasi sesi aktif langsung ke Firestore untuk mencegah orphaned `labId`.
+2. **D-05 (Presensi Lokasi)**: Validasi field `lokasi` (map dengan hasOnly & hasAll 5 kunci: `lat`, `lng`, `akurasiM`, `jarakM`, `mocked`), `akurasiM <= 50`, `jarakM <= radiusM`, `mocked == false`, konsistensi `labId`, serta kompatibilitas mundur dokumen presensi lama Sprint 2.
+3. **D-06 (Perangkat & Notifikasi Push)**: Validasi subkoleksi `devices` (`platform in ['android', 'ios']`, `token.size() <= 200`, `updatedAt is timestamp`), isolasi token antar pengguna, hak asisten membaca/menghapus token, dan pencegahan modifikasi token orang lain.
+4. **Uji Kasus 1–9 Sesi & Presensi**: Verifikasi regresi memastikan pembaruan rules Sprint 3 pada `sessions` dan `attendances` tidak merusak validasi status sesi, kode privat, izin, dan hak akses praktikan.
 
 ---
 
