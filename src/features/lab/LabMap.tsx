@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -9,6 +10,7 @@ import {
 import { Camera, Map, Marker } from '@maplibre/maplibre-react-native';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LabInfoSheet } from '@/components/location/LabInfoSheet';
 import { LocationStatusCard } from '@/components/location/LocationStatusCard';
@@ -27,7 +29,7 @@ import {
   useWatchPosition,
 } from '@/store/appStore';
 import { colors } from '@/theme/colors';
-import { radius, spacing } from '@/theme/spacing';
+import { layout, radius, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import type { Lab } from '@/types';
 
@@ -35,6 +37,7 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const DEFAULT_CENTER_LAT = -7.770123;
 const DEFAULT_CENTER_LNG = 110.370123;
 const DEFAULT_ZOOM = 16;
+const DELTA_BOUNDS_PADDING = 0.002;
 
 export type LabMapProps = {
   role?: 'praktikan' | 'asisten';
@@ -42,6 +45,7 @@ export type LabMapProps = {
 
 export function LabMap({ role = 'praktikan' }: LabMapProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [isFocused, setIsFocused] = useState(true);
   useWatchPosition(isFocused);
 
@@ -64,11 +68,10 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
   useFocusEffect(
     useCallback(() => {
       setIsFocused(true);
-      void refreshLocation();
       return () => {
         setIsFocused(false);
       };
-    }, [refreshLocation]),
+    }, []),
   );
 
   const selectedLab = useMemo(
@@ -92,14 +95,14 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
 
   // Initial center coordinates
   const initialCenter: [number, number] = useMemo(() => {
-    if (location.position?.lng && location.position?.lat) {
+    if (location.status === 'ready' && location.position?.lng && location.position?.lat) {
       return [location.position.lng, location.position.lat];
     }
     if (labs.length > 0) {
       return [labs[0].lng, labs[0].lat];
     }
     return [DEFAULT_CENTER_LNG, DEFAULT_CENTER_LAT];
-  }, [location.position, labs]);
+  }, [location.status, location.position, labs]);
 
   const handleAction = async (actionFn: () => Promise<unknown>) => {
     setIsActionLoading(true);
@@ -115,20 +118,34 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
     void handleAction(requestLocation);
   };
 
-  // Navigasi ke posisi pengguna
-  const handleFlyToMyLocation = () => {
-    if (location.position) {
+  // Navigasi ke posisi pengguna: flyTo setelah refresh bila status ready
+  const handleFlyToMyLocation = async () => {
+    if (location.status === 'ready' && location.position) {
       cameraRef.current?.flyTo({
         center: [location.position.lng, location.position.lat],
         zoom: DEFAULT_ZOOM,
         duration: 800,
       });
-    } else {
-      void handleAction(refreshLocation);
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      await refreshLocation();
+      const updated = useAppStore.getState().location;
+      if (updated.status === 'ready' && updated.position) {
+        cameraRef.current?.flyTo({
+          center: [updated.position.lng, updated.position.lat],
+          zoom: DEFAULT_ZOOM,
+          duration: 800,
+        });
+      }
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
-  // Navigasi untuk melihat semua lab (fit bounds)
+  // Navigasi untuk melihat semua lab (bounds hanya dari lab dan tangani koordinat sama)
   const handleFitAllLabs = () => {
     if (labs.length === 0) return;
 
@@ -146,14 +163,6 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
     let minLat = labs[0].lat;
     let maxLat = labs[0].lat;
 
-    // Jika posisi pengguna ada, ikut sertakan dalam bounds
-    if (location.position) {
-      minLng = Math.min(minLng, location.position.lng);
-      maxLng = Math.max(maxLng, location.position.lng);
-      minLat = Math.min(minLat, location.position.lat);
-      maxLat = Math.max(maxLat, location.position.lat);
-    }
-
     for (const lab of labs) {
       if (lab.lng < minLng) minLng = lab.lng;
       if (lab.lng > maxLng) maxLng = lab.lng;
@@ -161,7 +170,23 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
       if (lab.lat > maxLat) maxLat = lab.lat;
     }
 
-    cameraRef.current?.fitBounds([minLng, minLat, maxLng, maxLat], {
+    // Tangani jika koordinat semua lab sama atau sangat berdekatan
+    if (minLng === maxLng && minLat === maxLat) {
+      cameraRef.current?.flyTo({
+        center: [minLng, minLat],
+        zoom: DEFAULT_ZOOM,
+        duration: 800,
+      });
+      return;
+    }
+
+    // Beri sedikit margin jika selisihnya terlalu kecil
+    const adjustedMinLng = minLng === maxLng ? minLng - DELTA_BOUNDS_PADDING : minLng;
+    const adjustedMaxLng = minLng === maxLng ? maxLng + DELTA_BOUNDS_PADDING : maxLng;
+    const adjustedMinLat = minLat === maxLat ? minLat - DELTA_BOUNDS_PADDING : minLat;
+    const adjustedMaxLat = minLat === maxLat ? maxLat + DELTA_BOUNDS_PADDING : maxLat;
+
+    cameraRef.current?.fitBounds([adjustedMinLng, adjustedMinLat, adjustedMaxLng, adjustedMaxLat], {
       padding: { top: 60, bottom: 60, left: 60, right: 60 },
       duration: 800,
     });
@@ -183,6 +208,9 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
       router.push(`/praktikan/sesi/${sessionId}`);
     }
   };
+
+  const isLocationProblem =
+    location.status !== 'ready' && location.status !== 'checking';
 
   const showPermissionPrompt =
     location.status === 'idle' ||
@@ -230,7 +258,8 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
         <Map
           mapStyle={MAP_STYLE}
           style={styles.map}
-          attribution
+          attribution={false}
+          logo={false}
           accessibilityLabel="Peta laboratorium dan lokasi perangkat"
         >
           <Camera
@@ -241,9 +270,9 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
             }}
           />
 
-          {/* Marker Posisi Perangkat Sendiri */}
-          {location.position ? (
-            <Marker lngLat={[location.position.lng, location.position.lat]}>
+          {/* Marker Posisi Perangkat Sendiri hanya saat status ready */}
+          {location.status === 'ready' && location.position ? (
+            <Marker lngLat={[location.position.lng, location.position.lat]} anchor="center">
               <View
                 accessible
                 accessibilityRole="none"
@@ -268,8 +297,8 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
           ))}
         </Map>
 
-        {/* Tombol Kontrol Peta: Ke posisiku & Lihat semua lab */}
-        <View style={styles.mapControls}>
+        {/* Tombol Kontrol Peta: Ke posisiku & Lihat semua lab dengan safe area inset atas */}
+        <View style={[styles.mapControls, { top: spacing.md + (role === 'praktikan' ? insets.top : 0) }]}>
           <Pressable
             accessibilityRole="button"
             aria-label="Ke posisiku"
@@ -289,62 +318,68 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
           </Pressable>
         </View>
 
-        {/* Atribusi OpenStreetMap wajib tampil (FR-44) */}
+        {/* Atribusi Tunggal OpenStreetMap & OpenFreeMap */}
         <View style={styles.attributionContainer} pointerEvents="none">
-          <Text style={styles.attributionText}>Peta © OpenStreetMap contributors</Text>
+          <Text style={styles.attributionText}>© OpenStreetMap contributors, OpenFreeMap</Text>
         </View>
       </View>
 
-      {/* Bagian Bawah: Panel Izin/Status Lokasi & LabInfoSheet */}
+      {/* Bagian Bawah: Panel Izin/Status Lokasi & LabInfoSheet dibungkus ScrollView */}
       <View style={styles.bottomSection}>
-        {/* Banner Offline FR-58 */}
-        {!isOnline ? (
-          <Banner
-            tone="info"
-            message="Kamu sedang offline. Data aktivitas lab mungkin belum terbaru."
-          />
-        ) : null}
+        <ScrollView
+          style={styles.bottomScrollView}
+          contentContainerStyle={styles.bottomScrollContent}
+          showsVerticalScrollIndicator
+        >
+          {/* Banner Offline FR-58 */}
+          {!isOnline ? (
+            <Banner
+              tone="info"
+              message="Kamu sedang offline. Data aktivitas lab mungkin belum terbaru."
+            />
+          ) : null}
 
-        {/* Penanganan Izin / Status Lokasi bila bermasalah */}
-        {location.status !== 'ready' ? (
-          <View style={styles.statusSection}>
-            {showPermissionPrompt ? (
-              <PermissionPrompt
-                title="Izin Lokasi"
-                explanation="Rawuh membutuhkan lokasimu untuk menampilkan jarak ke lab dan posisimu di peta."
-                primaryAction={{
-                  label: 'Izinkan lokasi',
-                  onPress: handleRequestLocation,
-                  loading: isActionLoading,
-                }}
-              />
-            ) : (
-              <LocationStatusCard
-                status={location.status}
-                labName={selectedLab?.nama ?? 'Lab'}
-                jarakM={distanceInfo?.jarakM ?? null}
-                radiusM={selectedLab?.radiusM ?? DEFAULT_RADIUS_M}
-                akurasiM={location.position?.akurasiM ?? null}
-                action={getCardAction()}
-              />
-            )}
-          </View>
-        ) : null}
+          {/* Kartu status lokasi hanya saat status bermasalah */}
+          {isLocationProblem ? (
+            <View style={styles.statusSection}>
+              {showPermissionPrompt ? (
+                <PermissionPrompt
+                  title="Izin Lokasi"
+                  explanation="Rawuh membutuhkan lokasimu untuk menampilkan jarak ke lab dan posisimu di peta."
+                  primaryAction={{
+                    label: 'Izinkan lokasi',
+                    onPress: handleRequestLocation,
+                    loading: isActionLoading,
+                  }}
+                />
+              ) : (
+                <LocationStatusCard
+                  status={location.status}
+                  labName={selectedLab?.nama ?? 'Lab'}
+                  jarakM={distanceInfo?.jarakM ?? null}
+                  radiusM={selectedLab?.radiusM ?? DEFAULT_RADIUS_M}
+                  akurasiM={location.position?.akurasiM ?? null}
+                  action={getCardAction()}
+                />
+              )}
+            </View>
+          ) : null}
 
-        {/* Panel Informasi Lab Terpilih */}
-        {selectedLab ? (
-          <LabInfoSheet
-            lab={selectedLab}
-            berlangsung={labActivity.berlangsung}
-            berikutnya={labActivity.berikutnya}
-            jarakM={distanceInfo?.jarakM ?? null}
-            onPilihSesi={handleSelectSession}
-          />
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Belum ada data laboratorium.</Text>
-          </View>
-        )}
+          {/* Panel Informasi Lab Terpilih */}
+          {selectedLab ? (
+            <LabInfoSheet
+              lab={selectedLab}
+              berlangsung={labActivity.berlangsung}
+              berikutnya={labActivity.berikutnya}
+              jarakM={distanceInfo?.jarakM ?? null}
+              onPilihSesi={handleSelectSession}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>Belum ada data laboratorium.</Text>
+            </View>
+          )}
+        </ScrollView>
       </View>
     </View>
   );
@@ -366,7 +401,6 @@ const styles = StyleSheet.create({
   },
   mapControls: {
     position: 'absolute',
-    top: spacing.md,
     right: spacing.md,
     gap: spacing.sm,
     zIndex: 20,
@@ -378,12 +412,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    minHeight: 40,
+    minHeight: layout.minTouch,
+    minWidth: layout.minTouch,
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 3,
@@ -395,7 +430,7 @@ const styles = StyleSheet.create({
     }),
   },
   controlButtonPressed: {
-    backgroundColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
   },
   controlButtonText: {
     ...typography.label,
@@ -403,12 +438,14 @@ const styles = StyleSheet.create({
   },
   attributionContainer: {
     position: 'absolute',
-    bottom: 4,
-    right: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    paddingHorizontal: 4,
+    bottom: spacing.xs,
+    right: spacing.sm,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: spacing.xs,
     paddingVertical: 2,
-    borderRadius: 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   attributionText: {
     ...typography.caption,
@@ -427,8 +464,9 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.accent,
-    opacity: 0.35,
+    backgroundColor: colors.accentSubtle,
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
   userMarkerCore: {
     width: 12,
@@ -445,6 +483,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.lg,
     borderTopWidth: 1,
     borderColor: colors.border,
+  },
+  bottomScrollView: {
+    flexGrow: 0,
+  },
+  bottomScrollContent: {
+    flexGrow: 1,
+    gap: spacing.sm,
   },
   statusSection: {
     padding: spacing.md,

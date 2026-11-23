@@ -20,7 +20,7 @@ export function LabMarker({ lab, hasOpenSession, isSelected, onPress }: LabMarke
   const labelText = `${lab.nama}${hasOpenSession ? ' (Ada Sesi Dibuka)' : ''}`;
 
   return (
-    <Marker lngLat={[lab.lng, lab.lat]} onPress={onPress}>
+    <Marker lngLat={[lab.lng, lab.lat]} anchor="bottom" onPress={onPress}>
       <View
         accessible
         accessibilityRole="button"
