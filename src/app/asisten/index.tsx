@@ -21,12 +21,15 @@ import type { SessionFilter } from '@/features/asisten/sessionFilterLabels';
 import { IzinShortcut } from '@/features/asisten/IzinShortcut';
 import { KelasShortcut } from '@/features/asisten/KelasShortcut';
 import { KeluarSheet } from '@/features/asisten/KeluarSheet';
+import { LabShortcut } from '@/features/asisten/LabShortcut';
+import { PetaShortcut } from '@/features/asisten/PetaShortcut';
 import { SessionListItem } from '@/features/asisten/SessionListItem';
 import { useSyncRetry } from '@/features/asisten/useSyncRetry';
 import {
   useAppStore,
   useCurrentUser,
   useIzinForAsisten,
+  useLabs,
   useSessionsForUser,
   useSyncState,
 } from '@/store/appStore';
@@ -81,6 +84,8 @@ export default function AsistenHomeScreen() {
   const izinList = useIzinForAsisten();
   const izinSync = useSyncState('izin');
   const izinRetry = useSyncRetry(IZIN_SYNC_KEYS);
+  const labs = useLabs();
+  const labsSync = useSyncState('labs');
 
   const [filter, setFilter] = useState<SessionFilter>('all');
   const [keluarVisible, setKeluarVisible] = useState(false);
@@ -111,6 +116,14 @@ export default function AsistenHomeScreen() {
     () => (filter === 'all' ? sessions : sessions.filter((s) => s.status === filter)),
     [sessions, filter],
   );
+
+  const labNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const lab of labs) {
+      map.set(lab.id, lab.nama);
+    }
+    return map;
+  }, [labs]);
 
   const openCreate = () => router.push('/asisten/buat');
 
@@ -156,7 +169,12 @@ export default function AsistenHomeScreen() {
           <FlatList
             data={filteredSessions}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <SessionListItem session={item} />}
+            renderItem={({ item }) => {
+              const labName = item.labId
+                ? labNameMap.get(item.labId) ?? (labsSync === 'ready' ? undefined : '')
+                : undefined;
+              return <SessionListItem session={item} labName={labName} />;
+            }}
             ItemSeparatorComponent={ListSeparator}
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
@@ -183,6 +201,15 @@ export default function AsistenHomeScreen() {
                   </View>
                   <View style={styles.shortcutItem}>
                     <KelasShortcut onPress={() => router.push('/asisten/kelas')} />
+                  </View>
+                </View>
+
+                <View style={styles.shortcutRow}>
+                  <View style={styles.shortcutItem}>
+                    <LabShortcut onPress={() => router.push('/asisten/lab')} />
+                  </View>
+                  <View style={styles.shortcutItem}>
+                    <PetaShortcut onPress={() => router.push('/asisten/peta')} />
                   </View>
                 </View>
 

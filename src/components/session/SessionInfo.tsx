@@ -13,18 +13,27 @@ export type SessionInfoProps = {
   session: Session;
   /** Khusus layout (margin, flex, alignSelf), bukan warna/ukuran. */
   style?: StyleProp<ViewStyle>;
+  /**
+   * Nama laboratorium yang dirujuk session (FR-03).
+   * Urutan tampilan: labName -> ruang (sesi lama) -> "Lab belum diatur".
+   */
+  labName?: string;
 };
 
-export function SessionInfo({ session, style }: SessionInfoProps) {
+export function SessionInfo({ session, style, labName }: SessionInfoProps) {
+  const lokasiText = labName || session.ruang || 'Lab belum diatur';
+
   const valueText = (text: string, textStyle: TextStyle = styles.valueText) => (
-    <Text style={textStyle}>{text}</Text>
+    <Text style={textStyle} numberOfLines={1}>
+      {text}
+    </Text>
   );
 
   const rows: { label: string; value: ReactNode }[] = [
     { label: 'Praktikum', value: valueText(session.praktikum) },
     { label: 'Kelas', value: valueText(session.kelas) },
     { label: 'Topik', value: valueText(session.topik) },
-    { label: 'Ruang', value: valueText(session.ruang) },
+    { label: 'Laboratorium', value: valueText(lokasiText) },
     { label: 'Waktu', value: valueText(formatSessionTime(session), styles.timeText) },
     { label: 'Status', value: <StatusBadge status={session.status} /> },
   ];

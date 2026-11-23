@@ -13,6 +13,11 @@ export type SessionRowProps = {
   session: Session;
   onPress?: () => void;
   footerText?: string;
+  /**
+   * Nama laboratorium yang dirujuk session (FR-03).
+   * Urutan tampilan: labName -> ruang (sesi lama) -> "Lab belum diatur".
+   */
+  labName?: string;
 };
 
 // Ukuran tanpa padanan token: garis tepi kartu sama dengan Card, dan jarak baris topik yang
@@ -20,8 +25,9 @@ export type SessionRowProps = {
 const BORDER_WIDTH = 1;
 const TOPIK_LINE_HEIGHT = 22;
 
-export function SessionRow({ session, onPress, footerText }: SessionRowProps) {
+export function SessionRow({ session, onPress, footerText, labName }: SessionRowProps) {
   const timeText = formatSessionTime(session);
+  const lokasiText = labName || session.ruang || 'Lab belum diatur';
 
   return (
     <Pressable
@@ -29,7 +35,7 @@ export function SessionRow({ session, onPress, footerText }: SessionRowProps) {
       disabled={!onPress}
       role="button"
       // Status dibacakan dengan teks yang sama dengan badge, bukan nilai mentah ('open').
-      aria-label={`${session.praktikum}, Kelas ${session.kelas}, ${session.topik}, ${STATUS_LABEL[session.status]}`}
+      aria-label={`${session.praktikum}, Kelas ${session.kelas}, ${session.topik}, ${STATUS_LABEL[session.status]}, ${lokasiText}`}
       style={({ pressed }) => [
         styles.row,
         pressed && onPress && { opacity: PRESSED_OPACITY },
@@ -47,8 +53,10 @@ export function SessionRow({ session, onPress, footerText }: SessionRowProps) {
       </Text>
 
       <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>Kelas & Ruang:</Text>
-        <Text style={styles.metaValue}>Kelas {session.kelas} • {session.ruang}</Text>
+        <Text style={styles.metaLabel}>Kelas & Lokasi:</Text>
+        <Text style={styles.metaValue} numberOfLines={1}>
+          Kelas {session.kelas} • {lokasiText}
+        </Text>
       </View>
 
       <View style={styles.metaRow}>
@@ -100,18 +108,18 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   metaLabel: {
-    fontSize: typography.caption.fontSize,
+    ...typography.caption,
     color: colors.textMuted,
   },
   metaValue: {
-    fontSize: typography.caption.fontSize,
+    ...typography.caption,
     color: colors.text,
     fontWeight: typography.label.fontWeight,
+    flexShrink: 1,
   },
   metaValueTime: {
-    fontSize: typography.caption.fontSize,
+    ...typography.caption,
     color: colors.text,
-    fontWeight: typography.label.fontWeight,
     fontVariant: ['tabular-nums'],
   },
   footerBox: {
@@ -121,8 +129,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   footerText: {
-    fontSize: typography.caption.fontSize,
+    ...typography.caption,
     color: colors.textMuted,
-    fontVariant: ['tabular-nums'],
   },
 });
