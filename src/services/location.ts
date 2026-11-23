@@ -214,7 +214,7 @@ export async function getPosition(
  * Fungsi cleanup kosong bertanda khusus untuk menandai bahwa watcher tidak aktif berjalan
  * (misalnya karena izin belum diberikan atau layanan lokasi mati).
  */
-export const NOOP_WATCH_CLEANUP = Object.assign(() => {}, { isNoop: true as const });
+export const NOOP_WATCH_CLEANUP = () => {};
 
 /**
  * Berlangganan perubahan posisi perangkat secara berkala di latar depan (foreground).

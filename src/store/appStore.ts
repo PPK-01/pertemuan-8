@@ -1189,7 +1189,7 @@ async function startGlobalWatch(
     if (currentEpoch !== watchEpoch || watchRefCount === 0 || AppState.currentState !== 'active') {
       cleanup();
       globalWatchCleanup = null;
-    } else if (cleanup === NOOP_WATCH_CLEANUP || (cleanup as any).isNoop) {
+    } else if (cleanup === NOOP_WATCH_CLEANUP) {
       // Tidak menandai watch aktif jika yang dikembalikan hanya cleanup kosong (izin belum ada / services off)
       globalWatchCleanup = null;
     } else {
