@@ -128,21 +128,26 @@ export function PresensiScreen() {
     if (formError) setFormError(null);
   };
 
+  // Nama lab untuk pesan dinamis dan sheet: sumber sama dengan tampilan lab lainnya.
+  const activeLabNama = resolveLabText(
+    pickLabName(activeSession?.labId, activeLab?.nama, isLabsLoading(labsSync)),
+    activeSession?.ruang,
+  ).text;
+
   const renderFailMessage = (reason: AttendFailReason): string => {
     if (reason === 'OUTSIDE_RADIUS') {
-      const labName = activeLab?.nama ?? activeSession?.ruang ?? 'Lab';
       const radius = activeLab?.radiusM ?? DEFAULT_RADIUS_M;
       const jarakM = distanceInfo?.jarakM != null ? Math.round(distanceInfo.jarakM) : null;
 
       if (jarakM != null) {
         return getAttendFailMessage(reason, {
           x: jarakM,
-          lab: labName,
+          lab: activeLabNama,
           radius,
         });
       }
 
-      return `Kamu berada di luar radius ${labName}. Mendekatlah hingga ${radius} m.`;
+      return `Kamu berada di luar radius ${activeLabNama}. Mendekatlah hingga ${radius} m.`;
     }
 
     if (reason === 'LOW_ACCURACY') {
@@ -206,11 +211,6 @@ export function PresensiScreen() {
       setIsSubmitting(false);
     }
   };
-
-  const activeLabNama = resolveLabText(
-    pickLabName(activeSession?.labId, activeLab?.nama, isLabsLoading(labsSync)),
-    activeSession?.ruang,
-  ).text;
 
   return (
     <View style={styles.flex}>
