@@ -179,49 +179,19 @@ sequenceDiagram
    > **Catatan:** Jangan menambah server di menu "Add Server" untuk menghindari error *"Server address is invalid"*. Cukup gunakan server default bawaan `https://api.day.app`.
 4. URL notifikasi dengan auto-launch ke LiveContainer:
    ```text
-   https://api.day.app/KEY_KAMU/Rawuh/Sesi Presensi Dibuka?url=livecontainer://livecontainer-launch?bundle-name=com.laangid.rawuh&sound=minuet
+   https://api.day.app/KEY_KAMU/Rawuh/Sesi Presensi Dibuka?url=livecontainer://livecontainer-launch?bundle-name=com.ppk01.rawuh&sound=minuet
    ```
 5. Saat notifikasi tersebut diketuk di iPhone, iOS akan langsung membuka aplikasi **Rawuh** di dalam LiveContainer secara instan!
 
 ---
 
-## 5. Contoh Integrasi Kode Aplikasi
+## 5. Integrasi Kode Aplikasi
 
-File utilitas pengiriman notifikasi: `src/services/notificationRelay.ts`
+Implementasi aktif menggunakan [src/services/bark.ts](src/services/bark.ts) yang terintegrasi dengan [src/services/push.ts](src/services/push.ts), [src/store/appStore.ts](src/store/appStore.ts), dan tab Profil di [src/app/praktikan/(tabs)/profil.tsx](src/app/praktikan/(tabs)/profil.tsx):
 
-```typescript
-/**
- * Utility Pengirim Push Notification via Bark Relay untuk LiveContainer
- */
-
-const LC_LAUNCH_URL = 'livecontainer://livecontainer-launch?bundle-name=com.laangid.rawuh';
-
-export interface NotificationPayload {
-  title: string;
-  body: string;
-  barkKey: string;
-}
-
-export async function sendPushNotification(payload: NotificationPayload): Promise<boolean> {
-  const { title, body, barkKey } = payload;
-  if (!barkKey) return false;
-
-  const endpoint = `https://api.day.app/${encodeURIComponent(barkKey)}/${encodeURIComponent(title)}/${encodeURIComponent(body)}`;
-  const params = new URLSearchParams({
-    url: LC_LAUNCH_URL,
-    group: 'rawuh',
-    sound: 'minuet',
-  });
-
-  try {
-    const res = await fetch(`${endpoint}?${params.toString()}`);
-    return res.ok;
-  } catch (error) {
-    console.warn('[PushRelay] Gagal mengirim notifikasi:', error);
-    return false;
-  }
-}
-```
+- **Penyimpanan Token Aman**: Token disimpan di Firestore `users/{uid}/devices/{deviceId}` dengan prefix `bark:<device_key>` (`platform: 'ios'`), sedangkan fallback default lokal dapat diisi melalui variabel `.env` (`EXPO_PUBLIC_BARK_DEVICE_KEY`, tidak di-commit ke git).
+- **Routing Pengiriman**: `sendPush` di `src/services/push.ts` memisahkan token `bark:` untuk dikirim ke `https://api.day.app/push` dengan `url: livecontainer://livecontainer-launch?bundle-name=com.ppk01.rawuh`, sementara token Android tetap lewat Expo Push API.
+- **UI Pengaturan iOS**: Di tab Profil (khusus `Platform.OS === 'ios'`), praktikan dapat mengisi, menyimpan, mengetes langsung ke Lock Screen, atau menghapus Bark Device Key.
 
 ---
 
@@ -232,7 +202,7 @@ export async function sendPushNotification(payload: NotificationPayload): Promis
 | `incompatible platform (have 'iOS-simulator', need 'iOS')` | Masih ada binary atau framework yang belum di-patch dari platform `7` ke `2`. | Jalankan `./scripts/repackage-ipa.sh build/rawuh-build.tar.gz build/rawuh.ipa` versi terbaru (mem-patch seluruh 15 binary). |
 | *"Server address is invalid"* di Bark | Pengguna mencoba menambahkan server custom dengan URL tidak lengkap. | Hapus server custom, gunakan server default bawaan Bark (`https://api.day.app`). |
 | Notifikasi Lokal tidak muncul di LiveContainer | Izin notifikasi lokal belum diaktifkan di container. | Di LiveContainer, **tekan tahan (long-press) ikon Rawuh** -> **Settings** -> aktifkan **"Fix File Picker & Local Notification"**. |
-| Kuota App ID Apple habis saat update app | Meng-uninstall app lama lalu install app baru di SideStore. | Jangan uninstall. Cukup timpa (in-place update) dengan mengimpor IPA baru yang memiliki `bundleIdentifier` sama (`com.laangid.rawuh`). |
+| Kuota App ID Apple habis saat update app | Meng-uninstall app lama lalu install app baru di SideStore. | Jangan uninstall. Cukup timpa (in-place update) dengan mengimpor IPA baru yang memiliki `bundleIdentifier` sama (`com.ppk01.rawuh`). |
 | Update kode tanpa build IPA ulang | Ingin memperbarui tampilan/fitur tanpa menyentuh komputer atau SideStore. | Gunakan **Expo OTA Updates** (`npx eas update --branch production`). Kode JavaScript langsung terbarui over-the-air. |
 
 ---

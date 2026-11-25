@@ -1,6 +1,9 @@
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import type { Izin, Lab, NotifPayload, Session, User } from '@/types';
 import { formatDate, formatTime } from '@/utils/time';
+import { extractBarkKeyFromToken, isBarkDeviceToken, sendBarkNotification } from './bark';
 import { devWarn } from './devLog';
+import { db, isFirebaseReady } from './firebase';
 import { getDeviceTokensForUser } from './notifications';
 
 export type PushMessage = {
@@ -32,8 +35,9 @@ export function formatSessionSchedule(startAt: string): string {
 }
 
 /**
- * Mengirim pesan push notification ke Expo Push API dalam batch maksimal 100 pesan.
- * Mengembalikan daftar token yang ditolak oleh Expo Push Service (mis. DeviceNotRegistered).
+ * Mengirim pesan push notification ke Expo Push API dalam batch maksimal 100 pesan
+ * serta meneruskan token Bark (`bark:<key>`) melalui Bark APNs Relay untuk iOS LiveContainer.
+ * Mengembalikan daftar token yang ditolak oleh layanan push.
  */
 export async function sendPush(messages: PushMessage[]): Promise<string[]> {
   if (!messages || messages.length === 0) {
@@ -41,9 +45,28 @@ export async function sendPush(messages: PushMessage[]): Promise<string[]> {
   }
 
   const rejectedTokens: string[] = [];
+  const barkMessages = messages.filter((m) => isBarkDeviceToken(m.to));
+  const expoMessages = messages.filter((m) => !isBarkDeviceToken(m.to));
 
-  for (let i = 0; i < messages.length; i += MAX_BATCH_SIZE) {
-    const chunk = messages.slice(i, i + MAX_BATCH_SIZE);
+  if (barkMessages.length > 0) {
+    const barkResults = await Promise.all(
+      barkMessages.map(async (msg) => {
+        const barkKey = extractBarkKeyFromToken(msg.to);
+        if (!barkKey) return { token: msg.to, invalidDevice: true };
+        const res = await sendBarkNotification(barkKey, msg.title, msg.body);
+        return { token: msg.to, invalidDevice: res.invalidDevice };
+      }),
+    );
+
+    for (const r of barkResults) {
+      if (r.invalidDevice) {
+        rejectedTokens.push(r.token);
+      }
+    }
+  }
+
+  for (let i = 0; i < expoMessages.length; i += MAX_BATCH_SIZE) {
+    const chunk = expoMessages.slice(i, i + MAX_BATCH_SIZE);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -133,6 +156,40 @@ export async function sendNotificationToUsers(
   }
 }
 
+async function resolvePraktikanUidsForClass(kelas: string, users: User[]): Promise<string[]> {
+  const targetKelas = kelas.trim().toLowerCase();
+  if (!targetKelas) return [];
+
+  let sourceUsers = users;
+  if (sourceUsers.length === 0 && isFirebaseReady && db) {
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'users'), where('role', '==', 'praktikan')),
+      );
+      sourceUsers = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name,
+          email: data.email,
+          role: data.role,
+          kelas: data.kelas,
+        } as User;
+      });
+    } catch (err) {
+      devWarn('push-resolvePraktikanUids', err);
+    }
+  }
+
+  return sourceUsers
+    .filter(
+      (u) =>
+        u.role === 'praktikan' &&
+        (u.kelas ?? '').trim().toLowerCase() === targetKelas,
+    )
+    .map((u) => u.id);
+}
+
 /**
  * Notifikasi N1: Status sesi dijadwalkan dibuka (scheduled → open).
  * Penerima: praktikan kelas sesi tersebut.
@@ -142,10 +199,7 @@ export async function notifySessionOpened(
   users: User[],
   labs: Lab[],
 ): Promise<void> {
-  const praktikanUids = users
-    .filter((u) => u.role === 'praktikan' && u.kelas === session.kelas)
-    .map((u) => u.id);
-
+  const praktikanUids = await resolvePraktikanUidsForClass(session.kelas, users);
   if (praktikanUids.length === 0) return;
 
   const lab = session.labId ? labs.find((l) => l.id === session.labId) : null;
@@ -167,10 +221,7 @@ export async function notifySessionCreated(
   users: User[],
   labs: Lab[],
 ): Promise<void> {
-  const praktikanUids = users
-    .filter((u) => u.role === 'praktikan' && u.kelas === session.kelas)
-    .map((u) => u.id);
-
+  const praktikanUids = await resolvePraktikanUidsForClass(session.kelas, users);
   if (praktikanUids.length === 0) return;
 
   const lab = session.labId ? labs.find((l) => l.id === session.labId) : null;
@@ -178,6 +229,29 @@ export async function notifySessionCreated(
   const scheduleStr = formatSessionSchedule(session.startAt);
 
   const title = 'Jadwal baru';
+  const body = `${session.praktikum}: ${scheduleStr} di ${labName}.`;
+  const payload: NotifPayload = { type: 'session_created', sessionId: session.id };
+
+  await sendNotificationToUsers(praktikanUids, title, body, payload);
+}
+
+/**
+ * Notifikasi perubahan jadwal/detail sesi (waktu, topik, atau mata praktikum).
+ * Penerima: praktikan kelas sesi tersebut.
+ */
+export async function notifySessionUpdated(
+  session: Session,
+  users: User[],
+  labs: Lab[],
+): Promise<void> {
+  const praktikanUids = await resolvePraktikanUidsForClass(session.kelas, users);
+  if (praktikanUids.length === 0) return;
+
+  const lab = session.labId ? labs.find((l) => l.id === session.labId) : null;
+  const labName = lab?.nama || session.ruang || 'Lab';
+  const scheduleStr = formatSessionSchedule(session.startAt);
+
+  const title = 'Jadwal berubah';
   const body = `${session.praktikum}: ${scheduleStr} di ${labName}.`;
   const payload: NotifPayload = { type: 'session_created', sessionId: session.id };
 
@@ -216,10 +290,7 @@ export async function notifyLocationChanged(
   users: User[],
   labName: string,
 ): Promise<void> {
-  const praktikanUids = users
-    .filter((u) => u.role === 'praktikan' && u.kelas === session.kelas)
-    .map((u) => u.id);
-
+  const praktikanUids = await resolvePraktikanUidsForClass(session.kelas, users);
   if (praktikanUids.length === 0) return;
 
   const title = 'Lokasi praktikum berubah';

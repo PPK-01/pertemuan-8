@@ -56,7 +56,11 @@ if [ ! -f "$PROJECT_DIR/.env" ]; then
   echo "✗ File .env tidak ditemukan! Salin .env.example dan lengkapi konfigurasi Firebase."
   exit 1
 fi
-echo "  .env terdeteksi ✓"
+set -a
+# shellcheck disable=SC1091
+source "$PROJECT_DIR/.env"
+set +a
+echo "  .env terdeteksi & dimuat ✓"
 echo ""
 
 # Step 3: Run Typecheck

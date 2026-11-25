@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { AppStateStatus } from 'react-native';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -53,6 +53,7 @@ import {
   submitIzin as svcSubmitIzin,
 } from '@/services/izin';
 import { classifyIzin } from '@/services/ai';
+import { getSavedBarkKey, toBarkDeviceToken } from '@/services/bark';
 import { connectionService } from '@/services/connection';
 import { devWarn } from '@/services/devLog';
 import { isFirebaseReady } from '@/services/firebase';
@@ -72,6 +73,7 @@ import {
   notifyLocationChanged,
   notifySessionCreated,
   notifySessionOpened,
+  notifySessionUpdated,
 } from '@/services/push';
 import {
   retrySync as syncRetrySync,
@@ -347,7 +349,16 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       // Hapus token perangkat saat logout (FR-50); race timeout 10 detik agar tidak hang saat offline
       try {
         await Promise.race([
-          svcRemoveDeviceToken(user.id),
+          Promise.all([
+            svcRemoveDeviceToken(user.id),
+            Platform.OS === 'ios'
+              ? getSavedBarkKey().then((barkKey) =>
+                  barkKey
+                    ? svcRemoveDeviceToken(user.id, toBarkDeviceToken(barkKey))
+                    : undefined,
+                )
+              : Promise.resolve(),
+          ]),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('TIMEOUT')), 10000),
           ),
@@ -399,15 +410,31 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       oldSession.status !== 'closed' &&
       patch.labId !== undefined &&
       patch.labId !== oldSession.labId;
+    const scheduleChanged =
+      oldSession &&
+      oldSession.status !== 'closed' &&
+      ((patch.startAt !== undefined && patch.startAt !== oldSession.startAt) ||
+        (patch.endAt !== undefined && patch.endAt !== oldSession.endAt) ||
+        (patch.topik !== undefined && patch.topik !== oldSession.topik) ||
+        (patch.praktikum !== undefined && patch.praktikum !== oldSession.praktikum) ||
+        (patch.kelas !== undefined && patch.kelas !== oldSession.kelas));
 
     const res = await withWriteGuard(() => svcUpdateSession(id, patch));
-    if (res.ok && labChanged && oldSession) {
-      // N4: labId sesi yang belum Ditutup berubah
-      const newLab = patch.labId ? get().labs.find((l) => l.id === patch.labId) : null;
-      const labName = newLab?.nama || 'Lab';
-      notifyLocationChanged(oldSession, get().users, labName).catch((err) => {
-        devWarn('notify-updateSession', err);
-      });
+    if (res.ok && oldSession) {
+      const updatedSession = { ...oldSession, ...patch };
+      if (labChanged) {
+        // N4: labId sesi yang belum Ditutup berubah
+        const newLab = patch.labId ? get().labs.find((l) => l.id === patch.labId) : null;
+        const labName = newLab?.nama || 'Lab';
+        notifyLocationChanged(updatedSession, get().users, labName).catch((err) => {
+          devWarn('notify-updateSession', err);
+        });
+      }
+      if (scheduleChanged) {
+        notifySessionUpdated(updatedSession, get().users, get().labs).catch((err) => {
+          devWarn('notify-updateSession-schedule', err);
+        });
+      }
     }
     return res;
   },
@@ -650,6 +677,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
     registeringDeviceUids.add(user.id);
     try {
+      // Di iOS (LiveContainer), daftarkan Bark key terlebih dahulu agar tidak terblokir prompt/gagal APNs
+      if (Platform.OS === 'ios') {
+        const barkKey = await getSavedBarkKey();
+        if (barkKey && get().currentUser?.id === user.id) {
+          await svcSaveDeviceToken(user.id, toBarkDeviceToken(barkKey));
+        }
+      }
+
       // Minta izin notifikasi (dengan dialog penjelasan sebelum dialog sistem jika undetermined)
       const perm = await svcRequestNotifPermission(true);
       set({ notifPermission: perm });

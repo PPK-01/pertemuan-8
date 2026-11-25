@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { AppBar } from '@/components/ui/AppBar';
 import { Button } from '@/components/ui/Button';
@@ -8,7 +8,17 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IdentityCard } from '@/components/ui/IdentityCard';
 import { Screen } from '@/components/ui/Screen';
+import { TextField } from '@/components/ui/TextField';
 import { KeluarSheet } from '@/features/asisten/KeluarSheet';
+import {
+  clearBarkKeyLocally,
+  getSavedBarkKey,
+  parseBarkKey,
+  saveBarkKeyLocally,
+  sendBarkNotification,
+  toBarkDeviceToken,
+} from '@/services/bark';
+import { removeDeviceToken, saveDeviceToken } from '@/services/notifications';
 import {
   useAppStore,
   useAttendanceByUser,
@@ -33,12 +43,108 @@ export default function PraktikanProfilScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [keluarError, setKeluarError] = useState<string | null>(null);
 
+  const [barkInput, setBarkInput] = useState('');
+  const [savedBarkKey, setSavedBarkKey] = useState<string | null>(null);
+  const [barkBusy, setBarkBusy] = useState(false);
+  const [barkFeedback, setBarkFeedback] = useState<{
+    tone: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let active = true;
+    getSavedBarkKey().then((key) => {
+      if (active && key) {
+        setSavedBarkKey(key);
+        setBarkInput(key);
+        if (userId) {
+          void saveDeviceToken(userId, toBarkDeviceToken(key));
+        }
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
   const hadirCount = attendances.length;
   const izinApprovedCount = useMemo(
     () => izinList.filter((i) => i.status === 'approved').length,
     [izinList],
   );
   const totalSesi = sessions.length;
+
+  const handleSaveBarkKey = async () => {
+    const parsed = parseBarkKey(barkInput);
+    if (!parsed) {
+      setBarkFeedback({
+        tone: 'error',
+        message: 'Format Bark Key tidak valid. Tempel key atau URL dari aplikasi Bark.',
+      });
+      return;
+    }
+
+    setBarkBusy(true);
+    setBarkFeedback(null);
+    try {
+      await saveBarkKeyLocally(parsed);
+      const res = await saveDeviceToken(userId, toBarkDeviceToken(parsed));
+      if (!res.ok) {
+        setBarkFeedback({
+          tone: 'error',
+          message: res.message || 'Gagal mendaftarkan Bark Key ke server.',
+        });
+        return;
+      }
+      setSavedBarkKey(parsed);
+      setBarkInput(parsed);
+      setBarkFeedback({
+        tone: 'success',
+        message: 'Bark Key tersimpan dan siap menerima notifikasi.',
+      });
+    } finally {
+      setBarkBusy(false);
+    }
+  };
+
+  const handleTestBark = async () => {
+    if (!savedBarkKey) return;
+    setBarkBusy(true);
+    setBarkFeedback(null);
+    try {
+      const res = await sendBarkNotification(
+        savedBarkKey,
+        'Tes Notifikasi Rawuh',
+        'Notifikasi Bark berhasil terhubung ke LiveContainer.',
+      );
+      setBarkFeedback(
+        res.ok
+          ? { tone: 'success', message: 'Notifikasi uji terkirim! Periksa banner iPhone kamu.' }
+          : { tone: 'error', message: 'Gagal mengirim uji notifikasi. Periksa key Bark kamu.' },
+      );
+    } finally {
+      setBarkBusy(false);
+    }
+  };
+
+  const handleRemoveBarkKey = async () => {
+    if (!savedBarkKey) return;
+    setBarkBusy(true);
+    setBarkFeedback(null);
+    try {
+      await removeDeviceToken(userId, toBarkDeviceToken(savedBarkKey));
+      await clearBarkKeyLocally();
+      setSavedBarkKey(null);
+      setBarkInput('');
+      setBarkFeedback({
+        tone: 'success',
+        message: 'Bark Key dihapus dari perangkat ini.',
+      });
+    } finally {
+      setBarkBusy(false);
+    }
+  };
 
   const confirmKeluar = async () => {
     setKeluarError(null);
@@ -145,6 +251,65 @@ export default function PraktikanProfilScreen() {
             </Text>
           </Card>
 
+          {/* Setup Notifikasi iOS LiveContainer via Bark */}
+          {Platform.OS === 'ios' && (
+            <Card>
+              <Text style={styles.sectionTitle}>Notifikasi iOS (Bark Relay)</Text>
+              <Text style={styles.guideText}>
+                Khusus pengguna LiveContainer iOS, masukkan Device Key dari aplikasi Bark agar
+                notifikasi sesi dan izin tetap masuk di layar kunci.
+              </Text>
+              <View style={styles.barkForm}>
+                <TextField
+                  label="Bark Device Key / URL"
+                  value={barkInput}
+                  onChangeText={setBarkInput}
+                  placeholder="Contoh: xYz12345AbCd atau https://api.day.app/..."
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  disabled={barkBusy}
+                />
+                {barkFeedback && (
+                  <Text
+                    style={[
+                      styles.barkFeedback,
+                      barkFeedback.tone === 'error'
+                        ? styles.barkFeedbackError
+                        : styles.barkFeedbackSuccess,
+                    ]}
+                  >
+                    {barkFeedback.message}
+                  </Text>
+                )}
+                <View style={styles.barkActions}>
+                  <Button
+                    label={savedBarkKey ? 'Perbarui Key' : 'Simpan & Aktifkan'}
+                    onPress={handleSaveBarkKey}
+                    loading={barkBusy}
+                    disabled={barkBusy || !barkInput.trim()}
+                    style={styles.barkActionBtn}
+                  />
+                  {savedBarkKey && (
+                    <Button
+                      label="Tes"
+                      variant="secondary"
+                      onPress={handleTestBark}
+                      disabled={barkBusy}
+                    />
+                  )}
+                  {savedBarkKey && (
+                    <Button
+                      label="Hapus"
+                      variant="danger"
+                      onPress={handleRemoveBarkKey}
+                      disabled={barkBusy}
+                    />
+                  )}
+                </View>
+              </View>
+            </Card>
+          )}
+
           {/* Tombol Logout Utama */}
           <Button
             label="Keluar dari Akun"
@@ -243,6 +408,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: colors.textMuted,
+  },
+  barkForm: {
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  barkFeedback: {
+    ...typography.caption,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  barkFeedbackSuccess: {
+    color: colors.feedback.success.text,
+  },
+  barkFeedbackError: {
+    color: colors.feedback.danger.text,
+  },
+  barkActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  barkActionBtn: {
+    flex: 1,
   },
   versionText: {
     ...typography.caption,
