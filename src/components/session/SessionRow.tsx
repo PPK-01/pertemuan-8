@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatSessionTime } from '@/components/session/sessionTime';
+import { resolveLabText } from '@/components/session/labText';
 import { StatusBadge } from '@/components/session/StatusBadge';
 import { STATUS_LABEL } from '@/components/session/statusLabel';
 import { PRESSED_OPACITY } from '@/components/ui/pressable';
@@ -15,7 +16,8 @@ export type SessionRowProps = {
   footerText?: string;
   /**
    * Nama laboratorium yang dirujuk session (FR-03).
-   * Urutan tampilan: labName -> ruang (sesi lama) -> "Lab belum diatur".
+   * `string`: nama lab. `''`: lab sedang dimuat ("Memuat lab…"). `undefined`: `ruang` sesi lama,
+   * selain itu "Lab belum diatur".
    */
   labName?: string;
 };
@@ -27,7 +29,7 @@ const TOPIK_LINE_HEIGHT = 22;
 
 export function SessionRow({ session, onPress, footerText, labName }: SessionRowProps) {
   const timeText = formatSessionTime(session);
-  const lokasiText = labName || session.ruang || 'Lab belum diatur';
+  const lokasiText = resolveLabText(labName, session.ruang).text;
 
   return (
     <Pressable

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { SessionInfo } from '@/components/session/SessionInfo';
+import { isLabsLoading, pickLabName } from '@/components/session/labText';
 import { AppBar } from '@/components/ui/AppBar';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
@@ -108,13 +109,15 @@ export default function AsistenDetailSesiScreen() {
   const currentStatus = session?.status ?? null;
 
   const labId = session?.labId;
-  const activeLabName = useMemo(() => {
-    if (!labId) return undefined;
-    const found = labs.find((l) => l.id === labId);
-    if (found) return found.nama;
-    if (labsSync !== 'ready') return '';
-    return undefined;
-  }, [labId, labs, labsSync]);
+  const activeLabName = useMemo(
+    () =>
+      pickLabName(
+        labId,
+        labs.find((l) => l.id === labId)?.nama,
+        isLabsLoading(labsSync),
+      ),
+    [labId, labs, labsSync],
+  );
 
   // Pesan sukses dari form ubah sesi, diambil saat layar ini kembali fokus setelah router.back().
   useFocusEffect(

@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { LocationStatusCard } from '@/components/location/LocationStatusCard';
 import type { LocationStatusCardAction } from '@/components/location/LocationStatusCard';
 import { PermissionPrompt } from '@/components/location/PermissionPrompt';
+import { isLabsLoading, pickLabName, resolveLabText } from '@/components/session/labText';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -14,6 +15,7 @@ import {
   useAppStore,
   useDistanceToLab,
   useLocation,
+  useSyncState,
 } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
@@ -54,7 +56,11 @@ export function PresensiLokasiForm({
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [hasRequestedPermission, setHasRequestedPermission] = useState(false);
 
-  const labName = lab?.nama || session.ruang || 'Lab belum diatur';
+  const labsLoading = isLabsLoading(useSyncState('labs'));
+  const labName = resolveLabText(
+    pickLabName(session.labId, lab?.nama, labsLoading),
+    session.ruang,
+  ).text;
   const radiusM = lab?.radiusM ?? DEFAULT_RADIUS_M;
   const jarakM = distanceInfo?.jarakM ?? null;
   const inRadius = distanceInfo?.didalamRadius ?? false;

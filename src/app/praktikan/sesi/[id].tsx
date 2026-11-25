@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { IzinStatusBadge } from '@/components/izin/IzinStatusBadge';
+import { isLabsLoading, pickLabName } from '@/components/session/labText';
 import { SessionInfo } from '@/components/session/SessionInfo';
 import { AppBar } from '@/components/ui/AppBar';
 import { Banner } from '@/components/ui/Banner';
@@ -17,6 +17,7 @@ import {
   useIzinByUser,
   useLabForSession,
   useSessionById,
+  useSyncState,
 } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/spacing';
@@ -37,16 +38,8 @@ export default function DetailSesiScreen() {
   const izinList = useIzinByUser(currentUser?.id ?? '');
   const existingIzin = izinList.find((item) => item.sessionId === sessionId);
 
-  // FR-03: Fallback nama lab -> ruang -> "Lab belum diatur"
-  const labNama = lab?.nama || session?.ruang || 'Lab belum diatur';
-
-  const sessionWithLab = useMemo(() => {
-    if (!session) return undefined;
-    return {
-      ...session,
-      ruang: labNama,
-    };
-  }, [session, labNama]);
+  // FR-03: nama lab -> ruang (sesi lama) -> "Lab belum diatur"; '' bila lab belum tersinkron.
+  const labName = pickLabName(session?.labId, lab?.nama, isLabsLoading(useSyncState('labs')));
 
   if (!currentUser) {
     return (
@@ -86,7 +79,7 @@ export default function DetailSesiScreen() {
         <Screen edges={['left', 'right', 'bottom']}>
           <View style={styles.page}>
             <Card>
-              <SessionInfo session={sessionWithLab ?? session} />
+              <SessionInfo session={session} labName={labName} />
             </Card>
             <Banner tone="danger" message={ATTEND_FAIL_MESSAGE.NOT_IN_CLASS} />
           </View>
@@ -102,7 +95,7 @@ export default function DetailSesiScreen() {
       <Screen edges={['left', 'right', 'bottom']}>
         <View style={styles.page}>
           <Card>
-            <SessionInfo session={sessionWithLab ?? session} />
+            <SessionInfo session={session} labName={labName} />
           </Card>
 
           {/* Skenario: Izin Disetujui (FR-28) */}

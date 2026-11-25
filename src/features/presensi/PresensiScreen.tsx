@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import type { AppStateStatus } from 'react-native';
 
+import { isLabsLoading, pickLabName, resolveLabText } from '@/components/session/labText';
 import { Banner } from '@/components/ui/Banner';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -63,6 +64,7 @@ export function PresensiScreen() {
   const todaySessions = useTodaySessionsForAttendance();
   const isOnline = useIsOnline();
   const sessionsSync = useSyncState('sessions');
+  const labsSync = useSyncState('labs');
   const attendancesSync = useSyncState('attendances');
   const syncRetry = useSyncRetry(PRESENSI_SYNC_KEYS);
   const submitAttendance = useAppStore((state) => state.submitAttendance);
@@ -126,21 +128,26 @@ export function PresensiScreen() {
     if (formError) setFormError(null);
   };
 
+  // Nama lab untuk pesan dinamis dan sheet: sumber sama dengan tampilan lab lainnya.
+  const activeLabNama = resolveLabText(
+    pickLabName(activeSession?.labId, activeLab?.nama, isLabsLoading(labsSync)),
+    activeSession?.ruang,
+  ).text;
+
   const renderFailMessage = (reason: AttendFailReason): string => {
     if (reason === 'OUTSIDE_RADIUS') {
-      const labName = activeLab?.nama ?? activeSession?.ruang ?? 'Lab';
       const radius = activeLab?.radiusM ?? DEFAULT_RADIUS_M;
       const jarakM = distanceInfo?.jarakM != null ? Math.round(distanceInfo.jarakM) : null;
 
       if (jarakM != null) {
         return getAttendFailMessage(reason, {
           x: jarakM,
-          lab: labName,
+          lab: activeLabNama,
           radius,
         });
       }
 
-      return `Kamu berada di luar radius ${labName}. Mendekatlah hingga ${radius} m.`;
+      return `Kamu berada di luar radius ${activeLabNama}. Mendekatlah hingga ${radius} m.`;
     }
 
     if (reason === 'LOW_ACCURACY') {
@@ -204,8 +211,6 @@ export function PresensiScreen() {
       setIsSubmitting(false);
     }
   };
-
-  const activeLabNama = activeLab?.nama || activeSession?.ruang || 'Lab belum diatur';
 
   return (
     <View style={styles.flex}>
