@@ -127,7 +127,7 @@ Menggunakan font sistem bawaan platform (*system font*) untuk menjamin performa 
 
 ### D. Navigasi Bawah dengan Tombol Tengah Sadar-Konteks
 - **Asisten:** Bar bawah berlatar terang dengan satu tombol bulat besar navy di tengah yang menonjol ke atas (`marginTop: -24`), ikon plus kuning di dalamnya, dan label "Buat sesi" di bawahnya.
-- **Praktikan:** Tab Jadwal · Izin · Riwayat dengan tombol bulat aksi cepat "Isi kode" (`PraktikanTabBar`). Tombol aksi cepat sadar-konteks: langsung membuka detail sesi kelas yang sedang dibuka, atau memunculkan bottom sheet info jika belum ada sesi yang dibuka.
+- **Praktikan:** Tab Jadwal · Peta · Izin · Riwayat dengan tombol bulat "Presensi" di tengah (`PraktikanTabBar`) yang membuka halaman presensi; `aria-label` menjadi "Presensi, ada sesi dibuka" bila ada sesi Dibuka yang belum dipresensi. Profil dibuka lewat tombol avatar di header Jadwal (bukan tab).
 
 ### E. Baris Sesi (`SessionRow`)
 - Menampilkan data sesi sebagai kartu baris berpemisah bersih dan seragam.
@@ -201,6 +201,7 @@ Semua komponen hanya menerima props: tidak mengimpor store, `services/`, atau `e
 ## 9. Catatan Kompatibilitas Expo SDK 57 & 58
 - Seluruh komponen dirancang menggunakan primitif React Native dan Expo Router standar.
 - Navigasi tab bar kustom menggunakan `router.push()` dan `useAppStore` sehingga kompatibel 100% di Expo SDK 57 tanpa perlu pembaruan dependensi `package.json`.
+- Sprint 3 menambah modul native (MapLibre, `expo-location`, `expo-notifications`) sehingga aplikasi memerlukan development build, tidak lagi Expo Go. Komponen di `src/components/**` tetap hanya memakai primitif React Native; MapLibre hanya dipakai di `src/features/lab/`.
 
 ---
 
@@ -214,3 +215,71 @@ Semua komponen hanya menerima props: tidak mengimpor store, `services/`, atau `e
 ### Lainnya
 - `Banner` belum punya tone `warning`; penanda beda dari saran AI dan sheet status masih memakai bingkai `feedback.warning` buatan sendiri.
 - Animasi buka `BottomSheet` 250ms melebihi batas transisi ≤ 200ms di Aturan Larangan; perlu diputuskan apakah batasnya dilonggarkan untuk sheet atau durasinya diturunkan.
+
+---
+
+## 11. Pola Lokasi, Peta, dan Izin Perangkat (Sprint 3)
+
+Komponen berikut berada di `src/components/location/` dan `src/components/session/`, hanya menerima props (tidak mengimpor store, `services/`, atau MapLibre). Semua warna dan ukuran memakai token dari `src/theme` (`colors.feedback.*`, `colors.surface`, `colors.border`, `spacing`, `radius`, `layout.minTouch`, `typography.*`).
+
+### A. `LocationStatusCard` (status lokasi)
+
+- **Status selalu ditulis sebagai teks** (judul + isi), bukan hanya warna. Warna kartu memakai token `colors.feedback.<tone>` (latar dan teks); `aria-live="polite"` agar perubahan status diumumkan.
+- Saat `ready`, kartu memuat rincian **Jarak**, **Radius**, dan **Akurasi** (angka tabular) di bawah pesan "Di dalam radius" atau "Di luar radius".
+- Tombol aksi opsional (`action`) mengikuti props `Button`; saat `checking` tombol otomatis `loading` dan `disabled`. Tidak ada tombol untuk `mocked` dan `unavailable`.
+
+| Status | Judul | Tone | Aksi yang dipasang pemanggil |
+| :--- | :--- | :--- | :--- |
+| `ready` dalam radius | Di dalam radius | `success` | "Perbarui lokasi" |
+| `ready` luar radius | Di luar radius (menyebut jarak, nama lab, radius) | `warning` | "Perbarui lokasi" |
+| `ready` jarak belum ada | Jarak belum diketahui | `warning` | "Perbarui lokasi" |
+| `idle` | Menunggu lokasi | `info` | "Izinkan lokasi" |
+| `checking` | Mengecek lokasi | `info` | tombol memuat |
+| `permission_denied` | Akses lokasi ditolak | `danger` | "Coba lagi" |
+| `permission_blocked` | Akses lokasi diblokir | `danger` | "Buka Pengaturan" |
+| `services_off` | Layanan lokasi tidak aktif | `warning` | "Aktifkan lokasi" |
+| `low_accuracy` | Lokasi belum akurat (menyebut ±x m) | `warning` | "Perbarui lokasi" |
+| `mocked` | Lokasi palsu terdeteksi | `danger` | tidak ada |
+| `timeout` | Lokasi belum didapat | `warning` | "Perbarui lokasi" |
+| `unavailable` | Lokasi tidak tersedia | `danger` | tidak ada |
+
+Teks pesan mengikuti SRS 4.3 dan tidak boleh diubah per layar.
+
+### B. `PermissionPrompt` (penjelasan sebelum izin)
+
+- Panel dengan `title`, `explanation`, `primaryAction`, dan `secondaryAction` opsional (berdampingan, bertumpuk di layar sempit).
+- **Penjelasan tampil sebelum dialog sistem**: pengguna membaca alasan ("Rawuh membutuhkan lokasimu untuk memastikan kamu berada di lab saat presensi.") lalu menekan "Izinkan lokasi". Dialog izin sistem tidak boleh muncul sebelum itu.
+
+### C. Peta (`LabMap`, `LabMarker`)
+
+- **Atribusi satu kali.** Kontrol atribusi bawaan MapLibre dimatikan; atribusi "© OpenStreetMap contributors, OpenFreeMap" tampil sebagai satu teks kecil di pojok kanan bawah dan tidak menangkap sentuhan. Form lab memakai aturan yang sama (satu atribusi).
+- **Tombol kontrol** "Ke posisiku" dan "Lihat semua lab": tinggi dan lebar minimal `layout.minTouch` (44dp), `aria-label` sama dengan labelnya, diletakkan di kanan atas dengan inset area aman.
+- **Marker lab tidak dibedakan hanya dengan warna.** Lab yang memiliki sesi Dibuka memakai titik penuh di dalam pin, label berawalan "•", dan `aria-label` memuat "(Ada Sesi Dibuka)". Marker terpilih diperbesar dan diberi tepi aksen.
+- **Posisi sendiri** tampil sebagai marker hanya saat status lokasi `ready`; status bermasalah (selain `ready` dan `checking`) menampilkan `LocationStatusCard` atau `PermissionPrompt` di bawah peta.
+- **Kamera.** Pemusatan awal dilakukan sekali (posisi bila `ready`, selain itu lab dengan sesi Dibuka, selain itu lab pertama); tombol kontrol menggerakkan kamera atas permintaan pengguna.
+- **Panel di bawah peta** dapat di-scroll dengan tinggi maksimum 50% layar; peta menempati sisa tinggi (layar peta asisten tidak boleh ikut ter-scroll sebagai satu halaman).
+- **Offline.** Banner info "Kamu sedang offline. Data aktivitas lab mungkin belum terbaru." di atas panel.
+- **Pengganti web.** MapLibre native tidak berjalan di web: `LabMap.web.tsx` menampilkan "Daftar Laboratorium" dengan jarak, status lokasi, dan panel yang sama.
+- Catatan terbuka: kontrol peta dan marker saat ini memakai `elevation`/bayangan untuk terbaca di atas peta, yang menyimpang dari aturan 8.2; perlu diputuskan apakah dikecualikan atau diganti garis tepi.
+
+### D. `LabInfoSheet` (panel info lab)
+
+- Props: `lab`, `berlangsung`, `berikutnya`, `jarakM?`, `onPilihSesi?`.
+- Isi berurutan: nama lab (atau "Lab belum diatur" bila `lab` kosong), gedung, "Jarak: x m", bagian **Sedang berlangsung**, bagian **Berikutnya**. Tiap sesi memuat `StatusBadge` (teks + bentuk), praktikum, topik, kelas, dan waktu (tabular); baris dapat diketuk (≥ 44dp) menuju detail sesi.
+- Informasi lab dan jarak selalu tersedia sebagai teks sehingga peta bukan satu-satunya sumber informasi.
+
+### E. `RadiusField` (radius lab)
+
+- Berupa `Card` berisi `TextField` angka "Radius (meter)" dengan petunjuk "Rentang {min}–{max} meter."; props `value: number | null`, `onChange`, `min`, `max`, `error`. Masukan non-angka menjadi `null` dan divalidasi oleh pemanggil (`labValidation.ts`); pesan `error` menggantikan petunjuk.
+
+### F. Kontrak `labName` (`components/session/labText.ts`)
+
+Komponen yang menampilkan lab sesi menerima prop `labName` dengan arti:
+
+| Nilai `labName` | Arti | Teks tampil |
+| :--- | :--- | :--- |
+| String tidak kosong | Nama lab ditemukan | Nama lab |
+| `''` (string kosong) | Sesi punya `labId` tetapi data lab masih dimuat | "Memuat lab…" |
+| `undefined` | Tidak ada nama lab | `ruang` sesi lama bila tidak kosong, selain itu "Lab belum diatur" |
+
+Pemanggil menentukan nilainya dengan `pickLabName(labId, foundName, isLabsLoading(status))`; `labId` yatim (data lab sudah siap tetapi tidak ditemukan) menjadi `undefined`. Teks akhir dihasilkan `resolveLabText` agar "Memuat lab…" tidak berkedip menjadi "Lab belum diatur".
