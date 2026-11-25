@@ -7,6 +7,7 @@ import { collection, deleteDoc, doc, getDocs, serverTimestamp, setDoc } from 'fi
 import type { NotifPayload, NotificationPermission, Result, Role } from '@/types';
 import { db, isFirebaseReady } from './firebase';
 import { devWarn } from './devLog';
+import { colors } from '@/theme/colors';
 
 const NETWORK_TIMEOUT_MS = 10000;
 
@@ -46,7 +47,7 @@ export async function setupAndroidNotificationChannel(): Promise<void> {
         name: 'default',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#208AEF',
+        lightColor: colors.primary,
       });
     } catch (err) {
       devWarn('notif-setNotificationChannel', err);
