@@ -77,7 +77,8 @@ function LabMapCanvas({
         <Map
           mapStyle={MAP_STYLE}
           style={styles.map}
-          attribution
+          attribution={false}
+          logo={false}
           onPress={handleMapPress}
           accessibilityLabel="Peta lokasi lab. Ketuk peta untuk memindahkan titik lab."
         >
@@ -113,7 +114,7 @@ function LabMapCanvas({
         <Banner tone="danger" message={latError ?? lngError ?? ''} />
       ) : null}
       <Text style={styles.hint}>Ketuk peta untuk memindahkan titik lab.</Text>
-      <Text style={styles.attribution}>Peta © OpenStreetMap contributors</Text>
+      <Text style={styles.attribution}>© OpenStreetMap contributors, OpenFreeMap</Text>
     </>
   );
 }
