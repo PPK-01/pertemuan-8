@@ -1,8 +1,10 @@
 # SRS & Rencana Kerja Sprint 3: Aplikasi Presensi Praktikum "Rawuh" (Lokasi, Peta, dan Notifikasi)
 
-PM: Elang · Tim: Dhimas, Ibrahim · Sprint: 3 · Versi 3.2 (lanjutan SRS v2.2) · Repo: `PPK-01/pertemuan-8` · Batas pengerjaan: Senin
+PM: Elang · Tim: Dhimas, Ibrahim · Sprint: 3 · Versi 3.3 (lanjutan SRS v2.2) · Repo: `PPK-01/pertemuan-8` · Batas pengerjaan: Senin 23 Nov 2026
 
 > **Versi sebelumnya:** SRS v1.3 (Sprint 1) di `docs/arsip/SRS-v1.3-sprint-1.md`, SRS v2.2 (Sprint 2) di `docs/arsip/SRS-v2.2-sprint-2.md`. Komentar kode dan `DESIGN.md` yang ditulis sebelum Sprint 3 dengan rujukan "SRS §x" atau "SRS v2.2 §x" mengacu ke **v2.2**. Rujukan baru sejak Sprint 3 ditulis "SRS v3 §x".
+
+> **Patokan v3.3:** dokumen ini menggambarkan kondisi `main` terakhir (PR #1–#25). Perubahan setelah batas pengerjaan Senin 23 Nov 2026 (PR #22–#25, di-merge 25 Nov 2026) ditandai **pasca-batas**. Status akhir tiap kebutuhan ada di 4.5 dan utang teknis di bagian 16.
 
 ## 1. Pendahuluan
 
@@ -22,7 +24,9 @@ Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SR
 - Penanganan **izin dan kondisi perangkat**: izin lokasi ditolak, layanan lokasi mati, lokasi palsu, akurasi buruk, dan koneksi bermasalah.
 - **Rebuild** development build dengan identitas aplikasi baru dan modul native baru.
 
-**Di luar lingkup Sprint 3 (backlog):** posisi realtime pengguna lain di peta, lokasi di latar belakang, rute/arah ke lab, presensi QR code (Could, FR-45), aplikasi iOS, pencarian alamat (geocoding), riwayat notifikasi di dalam aplikasi, serta backlog Sprint 2 yang belum tersentuh (pengajuan ulang izin, reset kata sandi, cache offline persisten).
+**Di luar lingkup Sprint 3 (backlog):** posisi realtime pengguna lain di peta, lokasi di latar belakang, rute/arah ke lab, presensi QR code (Could, FR-45), aplikasi iOS resmi, pencarian alamat (geocoding), riwayat notifikasi di dalam aplikasi, serta backlog Sprint 2 yang belum tersentuh (pengajuan ulang izin, reset kata sandi, cache offline persisten). Demo dan kriteria penerimaan **hanya di Android**.
+
+**Eksperimental, di luar kriteria penerimaan (pasca-batas, PR #24 dan #25):** dukungan iOS lewat LiveContainer dengan notifikasi lewat relay Bark. Ini tambahan opsional agar tim yang memakai iPhone dapat mencoba aplikasi; kegagalannya tidak memengaruhi jalur Android dan tidak termasuk Definition of Done. Panduan ada di `IOS_LIVECONTAINER_GUIDE.md`; risikonya dicatat di 6.4.
 
 ### 1.3 Yang Dipertahankan dari Sprint 2
 
@@ -37,7 +41,7 @@ Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SR
 | Aspek | Keputusan | Alasan |
 | --- | --- | --- |
 | Biaya | **Seluruh layanan gratis tanpa kartu dan tanpa langganan.** Firebase **tetap paket Spark**; tidak ada layanan yang mewajibkan akun billing | Ketentuan PM. Karena itu Cloud Functions (wajib Blaze) dan Google Maps (wajib billing) tidak dipakai |
-| Pengirim notifikasi | **Expo Push Service**, dipanggil dari aplikasi asisten (`services/push.ts`) segera setelah aksi yang menjadi peristiwa berhasil (buat sesi, buka sesi, putuskan izin, pindah lab) | Gratis tanpa kartu; di Android diteruskan lewat FCM. Keempat peristiwa wajib dipicu aksi asisten di aplikasi, jadi tidak perlu server. Ditolak: Cloud Functions (wajib Blaze), server terpisah gratis seperti Cloudflare Workers (lebih aman, tetapi menambah platform dan beban kerja; cadangan di bagian 14), OneSignal (tetap butuh server), notifikasi lokal (bukan push) |
+| Pengirim notifikasi | **Expo Push Service**, dipanggil dari aplikasi asisten (`services/push.ts`) segera setelah aksi yang menjadi peristiwa berhasil (buat sesi, buka sesi, putuskan izin, pindah lab, ubah jadwal) | Gratis tanpa kartu; di Android diteruskan lewat FCM. Semua peristiwa (N1–N4 dan N6) wajib dipicu aksi asisten di aplikasi, jadi tidak perlu server. Ditolak: Cloud Functions (wajib Blaze), server terpisah gratis seperti Cloudflare Workers (lebih aman, tetapi menambah platform dan beban kerja; cadangan di bagian 14), OneSignal (tetap butuh server), notifikasi lokal (bukan push) |
 | Penerima notifikasi | **`expo-notifications`**: izin notifikasi, **Expo push token** (`getExpoPushTokenAsync`), handler notifikasi masuk dan diketuk | Pustaka resmi Expo untuk development build; token yang sama dipakai Expo Push Service |
 | Kredensial FCM | `google-services.json` ditambahkan di aplikasi (tidak memuat rahasia). **Kunci akun layanan FCM V1** diunggah ke kredensial EAS oleh Dhimas dan **tidak pernah masuk repo**. Auth dan Firestore **tetap** memakai Firebase JS SDK | Syarat Expo Push Service untuk mengirim lewat FCM di Android; gratis |
 | Peta | **`@maplibre/maplibre-react-native`** dengan style vektor **OpenFreeMap** (tanpa API key, tanpa registrasi, tanpa batas tampilan), atribusi OpenStreetMap ditampilkan di peta | Satu-satunya opsi native yang gratis tanpa kartu dan tanpa pendaftaran. Ditolak: Google Maps / `react-native-maps` / `expo-maps` (wajib billing), tile server OpenStreetMap langsung (melarang pemakaian berat oleh aplikasi), MapTiler/Mapbox (butuh akun dan kunci). Cadangan: WebView + MapLibre GL JS + OpenFreeMap (bagian 14) |
@@ -45,6 +49,7 @@ Dokumen ini mendefinisikan kebutuhan perangkat lunak Sprint 3 dan melanjutkan SR
 | Marker pengguna | Posisi **perangkat sendiri**, diperbarui realtime di perangkat (`watchPositionAsync`) selama layar peta terbuka, tidak dikirim ke server | Privasi, kuota tulis Firestore, dan baterai |
 | Validasi radius | Jarak dihitung di klien (rumus haversine); bukti lokasi disimpan di dokumen presensi; rules memeriksa konsistensi bukti dengan radius lab | Rules Firestore tidak dapat membaca GPS (risiko sisa di 6.4) |
 | Identitas aplikasi | `package` Android baru **`com.ppk01.rawuh`**, `userInterfaceStyle: "light"`, pembaruan patch Expo, dalam **satu rebuild** di Tahap 1. Akun EAS (rebuild, kredensial FCM) dipegang Dhimas | Pendaftaran FCM terikat ke `package`; satu rebuild untuk semua perubahan native |
+| iOS (eksperimental, pasca-batas) | Build iOS gratis untuk LiveContainer (`IOS_LIVECONTAINER_GUIDE.md`); token berformat `bark:<key>` dikirim lewat relay Bark (`https://api.day.app/push`) bersama pengiriman Expo secara paralel; key Bark diisi manual di tab Profil | Build iOS tanpa akun developer berbayar tidak memiliki entitlement APNs sehingga Expo Push tidak dapat dipakai; di luar kriteria penerimaan dan demo tetap Android |
 | Web | Tetap didukung untuk uji tampilan; **peta diganti daftar lab** di web (MapLibre native tidak berjalan di web); lokasi di web memakai geolocation browser; notifikasi tidak aktif di web. Demo hanya di Android | NFR-06 dipertahankan sejauh mungkin |
 
 Dependency baru dipasang sekali di Tahap 1 (D-01) oleh Dhimas: `expo-location`, `@maplibre/maplibre-react-native`, `expo-notifications`, `expo-device` (bila dibutuhkan `expo-notifications`), lewat `npx expo install`. Tidak ada folder `functions/` dan tidak ada server tambahan.
@@ -81,13 +86,14 @@ sessions/{sessionId}           { ...v2.2, labId }                               
 attendances/{sessionId}_{uid}  { ...v2.2, labId,
                                  lokasi: { lat, lng, akurasiM, jarakM, mocked } }       // DIUBAH
 users/{uid}/devices/{deviceId} { token, platform, updatedAt }                          // BARU; token = Expo push token
+                                                                                          // (iOS eksperimental: `bark:<key>`, platform `ios`)
 ```
 
 Keputusan struktur:
 
 - **Sesi merujuk lab lewat `labId`.** Nama, koordinat, dan radius selalu dibaca dari `labs`, sehingga perubahan lab langsung tercermin di semua sesi dan peta.
 - **Bukti lokasi disimpan di dokumen presensi** (koordinat, akurasi, jarak, status `mocked`) agar asisten dapat memeriksa dan rules dapat memvalidasi konsistensinya.
-- **Token perangkat di subkoleksi `devices`** milik pengguna. Satu pengguna dapat memiliki beberapa perangkat. `deviceId` diturunkan dari token (mis. hash) agar penulisan ulang token yang sama tidak menggandakan dokumen. Asisten dapat **membaca** token praktikan untuk mengirim notifikasi, tetapi tidak dapat mengubahnya.
+- **Token perangkat di subkoleksi `devices`** milik pengguna. Satu pengguna dapat memiliki beberapa perangkat. `deviceId` diturunkan dari token (mis. hash) agar penulisan ulang token yang sama tidak menggandakan dokumen. Asisten dapat **membaca** token praktikan untuk mengirim notifikasi, tetapi tidak dapat mengubahnya. Pada iOS eksperimental token berformat `bark:<key>` (key Bark milik pengguna, panjang ≤ 200 sesuai rules) dengan `platform: 'ios'`; token ini dihapus saat logout.
 
 ### 3.2 Model Domain (perubahan pada `src/types/index.ts`)
 
@@ -98,16 +104,25 @@ Lab {
   id, nama, gedung?: string,
   lat: number, lng: number,       // titik presensi
   radiusM: number,                // MIN_RADIUS_M..MAX_RADIUS_M
-  createdBy, updatedBy
+  createdBy, createdAt, updatedBy, updatedAt
 }
+
+CreateLabInput { nama, gedung?, lat, lng, radiusM }   // masukan form lab
+UpdateLabInput = Partial<CreateLabInput>
 
 Session { ...v2.2, labId?: LabId }
 // labId wajib untuk sesi baru (validasi form + rules create).
-// `ruang` tidak lagi diisi untuk sesi baru dan dipertahankan hanya untuk sesi lama.
-// Tampilan: nama lab bila labId ada, selain itu `ruang`, selain itu "Lab belum diatur".
+// Sesi baru menulis `ruang: ''`; field `ruang` hanya berisi teks pada sesi lama (Sprint 2).
+// Tampilan (helper `components/session/labText.ts`): nama lab bila labId ada dan lab ditemukan;
+// selain itu `ruang` bila tidak kosong; selain itu "Lab belum diatur". Selama data lab belum
+// tersinkron (sesi punya labId tetapi `labs` masih dimuat) tampil "Memuat lab…", bukan "Lab belum diatur".
 
 LokasiPresensi { lat: number, lng: number, akurasiM: number, jarakM: number, mocked: boolean }
-Attendance { ...v2.2, labId: LabId, lokasi: LokasiPresensi }
+Attendance { ...v2.2, labId?: LabId, lokasi?: LokasiPresensi }
+// Pada tipe, labId dan lokasi opsional karena presensi Sprint 2 tidak memilikinya.
+// Presensi baru selalu menulis keduanya, dan rules mewajibkannya saat create.
+
+RekapItemHadir { user: User, timestamp: string, lokasi?: LokasiPresensi }   // butir `hadir` pada Rekap
 
 DevicePosition { lat: number, lng: number, akurasiM: number, mocked: boolean, at: string }
 
@@ -136,6 +151,8 @@ NotifPayload =                                 // `data` pada pesan FCM
   | { type: 'session_created', sessionId }     // N2
   | { type: 'izin_decided', izinId }           // N3
   | { type: 'location_changed', sessionId }    // N4
+// N6 "Jadwal berubah" memakai { type: 'session_created', sessionId } agar diketuk membuka detail sesi;
+// tidak ada tipe payload baru.
 ```
 
 Kode error `Result` untuk lab mengikuti pola kelas pasca-audit: kode "masih dipakai" untuk hapus lab yang dipakai sesi yang belum Ditutup, kode "duplikat" untuk nama lab yang sama.
@@ -148,6 +165,7 @@ Konstanta di `src/constants/location.ts`:
 | `MIN_RADIUS_M` / `MAX_RADIUS_M` | 10 / 200 | Batas radius yang boleh diatur asisten |
 | `MAX_ACCURACY_M` | 50 | Akurasi GPS terburuk yang diterima untuk presensi |
 | `LOCATION_TIMEOUT_MS` | 15000 | Batas waktu mengambil posisi |
+| `DEV_FAKE_POSITION` | `null` | Posisi tiruan khusus `__DEV__` untuk uji web; bernilai `null` secara bawaan (lihat bagian 16) |
 
 ### 3.3 Alur Presensi Berbasis Lokasi
 
@@ -166,16 +184,18 @@ Posisi diambil ulang tepat sebelum menulis bila posisi terakhir lebih tua dari 3
 ### 3.4 Alur Notifikasi
 
 ```
-[aplikasi asisten] aksi berhasil ditulis ke Firestore (buat sesi, buka sesi, putuskan izin, ubah lab sesi/lab)
+[aplikasi asisten] aksi berhasil ditulis ke Firestore (buat sesi, buka sesi, putuskan izin, ubah lab sesi/lab, ubah jadwal sesi)
    -> store menentukan penerima (praktikan kelas sesi, atau pengaju izin) dari cache `users`
    -> membaca users/{uid}/devices penerima -> services/push.ts mengirim ke Expo Push API
-      (POST https://exp.host/--/api/v2/push/send, maksimal 100 pesan per permintaan)
+      (POST https://exp.host/--/api/v2/push/send, maksimal 100 pesan per permintaan, timeout 10 detik)
+      dan, untuk token `bark:<key>` (iOS eksperimental), ke relay Bark (https://api.day.app/push)
+      -- keduanya dikirim paralel; kegagalan atau kelambatan Bark tidak menunda pengiriman Expo
    -> Expo Push Service meneruskan lewat FCM ke perangkat Android
-   -> token yang ditolak (`DeviceNotRegistered`) dihapus (FR-54)
+   -> token yang ditolak (`DeviceNotRegistered`) dikembalikan `sendPush`; penghapusannya (FR-54) belum dijalankan (4.5, bagian 16)
 [perangkat] -> notifikasi tampil -> diketuk -> root layout membaca `data` -> navigasi ke layar terkait
 ```
 
-Pengiriman notifikasi dilakukan **setelah** penulisan berhasil dan **tidak menggagalkan** aksi: bila pengiriman gagal, aksi tetap sukses dan kegagalan hanya dicatat (tanpa `console.error`). Perubahan langsung dari Firebase Console tidak memicu notifikasi.
+Pengiriman notifikasi dilakukan **setelah** penulisan berhasil dan **tidak menggagalkan** aksi: bila pengiriman gagal, aksi tetap sukses dan kegagalan hanya dicatat (tanpa `console.error`). Perubahan langsung dari Firebase Console tidak memicu notifikasi. **Satu aksi ubah sesi menghasilkan maksimal satu notifikasi:** bila lab berubah hanya N4 yang dikirim; bila hanya jam mulai atau jam selesai berubah dikirim N6; perubahan topik saja tidak mengirim apa pun (4.4).
 
 ### 3.5 Kontrak Layer Data (tambahan)
 
@@ -187,7 +207,11 @@ services/location.ts      getPermission, requestPermission, openSettings, isServ
 services/attendance.ts    submitAttendance(sessionId, code, position) /* + labId, lokasi */
 services/notifications.ts getNotifPermission, requestNotifPermission, getDeviceToken,
                           saveDeviceToken, removeDeviceToken, addNotificationListeners
-services/push.ts          sendPush(messages) /* Expo Push API, batch ≤ 100, kembalikan token yang ditolak */
+services/push.ts          sendPush(messages) /* token Expo: Expo Push API, batch ≤ 100;
+                                              token `bark:`: relay Bark; keduanya paralel (allSettled);
+                                              kembalikan token yang ditolak */
+services/bark.ts          (iOS eksperimental) parseBarkKey, toBarkDeviceToken, isBarkDeviceToken,
+                          getSavedBarkKey, saveBarkKeyLocally, clearBarkKeyLocally, sendBarkNotification
 ```
 
 **Kontrak store (tambahan pada `src/store/appStore.ts`)**
@@ -202,10 +226,18 @@ Aksi  : addLab(input) / updateLab(id, patch) / deleteLab(id)  -> Promise<Result>
         openLocationSettings()       -> Promise<void>
         enableLocationServices()     -> Promise<LocationStatus>   // dialog sistem Android
         submitAttendance(sessionId, code) -> Promise<AttendResult> // posisi diambil dari state, divalidasi ulang
-        registerDevice()             -> Promise<void>              // dipanggil setelah login
+        registerDevice()             -> Promise<void>              // dipanggil setiap currentUser.id berganti (login, daftar, ganti akun), satu titik panggil di initAuth
         // createSession, openSession, updateSession (labId berubah), updateLab (koordinat/nama berubah),
         // reviewIzin memanggil notify(peristiwa) setelah berhasil; hasil aksi tidak bergantung pada notifikasi
-        // logout() kini juga menghapus token perangkat ini dan menghentikan watch lokasi
+        // logout() kini juga menghapus token perangkat ini (di iOS juga token Bark dan key lokalnya)
+        //   dan menghentikan watch lokasi; logout tidak menggantung saat offline (timeout 10 detik)
+Catatan perilaku:
+        // `location.position` diisi untuk status ready, low_accuracy, dan mocked, tetapi hanya status `ready`
+        //   yang dipakai untuk marker posisi dan presensi.
+        // Pesan dinamis ({x}, {lab}, {radius}) diisi halaman/komponen presensi dari data store,
+        //   bukan oleh store; store hanya mengembalikan `AttendFailReason`.
+        // submitAttendance memetakan status lokasi `unavailable`, `idle`, dan `checking` ke `UNKNOWN`.
+        // Tap notifikasi oleh asisten diarahkan ke /asisten/sesi/{id} dan /asisten/izin/{id}.
 Hook baca (* baru):
         useLabs()*, useLabById(id)*, useLabForSession(sessionId)*,
         useLabActivity(labId)*        // { berlangsung: Session[], berikutnya: Session[] } sudah difilter per peran
@@ -324,7 +356,7 @@ Fungsi validasi berupa fungsi murni: `features/lab/labValidation.ts` (milik Ibra
 | Hapus lab dipakai sesi | "Lab ini masih dipakai sesi yang belum ditutup." | n/a |
 | Izin notifikasi ditolak | "Notifikasi nonaktif. Kamu tidak akan menerima pemberitahuan sesi dan izin." | "Buka Pengaturan" |
 
-Pesan error v2.2 tetap berlaku. Urutan pra-cek presensi v2.2 diperluas: offline → sesi tidak Dibuka → kelas berbeda → sudah hadir → izin disetujui → **lab tidak ada → status lokasi bukan `ready` → di luar radius**. Bila penulisan tetap ditolak rules, penentuan alasan mengikuti v2.2.
+Pesan pada kartu status dipecah menjadi judul dan isi (mis. "Akses lokasi diblokir" / "Aktifkan di Pengaturan aplikasi."); tekstualnya mengikuti tabel di atas. Pesan error v2.2 tetap berlaku. Urutan pra-cek presensi v2.2 diperluas: offline → sesi tidak Dibuka → kelas berbeda → sudah hadir → izin disetujui → **lab tidak ada → status lokasi bukan `ready` → di luar radius**. Bila penulisan tetap ditolak rules, penentuan alasan mengikuti v2.2.
 
 ### 4.4 Peristiwa Notifikasi
 
@@ -334,9 +366,61 @@ Pesan error v2.2 tetap berlaku. Urutan pra-cek presensi v2.2 diperluas: offline 
 | N2 | Dokumen sesi dibuat | Praktikan kelas sesi | "Jadwal baru" / "{Praktikum}: {hari, tanggal, jam} di {Lab}." | Detail sesi |
 | N3 | Status izin `→ approved / rejected` | Praktikan pengaju | "Izin disetujui" / "Izin ditolak" + "untuk {Praktikum} {tanggal}." | Detail izin |
 | N4 | `labId` sesi yang belum Ditutup berubah, **atau** koordinat/nama lab yang dipakai sesi yang belum Ditutup berubah | Praktikan kelas sesi tersebut | "Lokasi praktikum berubah" / "{Praktikum} kini di {Lab}." | Detail sesi |
+| N6 (pasca-batas) | Jam mulai (`startAt`) atau jam selesai (`endAt`) sesi yang belum Ditutup benar-benar berubah (dibandingkan sebagai waktu, bukan teks) **dan** `labId` tidak berubah | Praktikan kelas sesi | "Jadwal berubah" / "{Praktikum}: {hari, tanggal, jam} di {Lab}." | Detail sesi |
 | N5 (Could) | Izin baru dibuat | Asisten pembuat sesi | "Izin baru" / "{Nama} mengajukan izin untuk {Praktikum}." | Detail izin asisten |
 
-N1–N4 dikirim **aplikasi asisten**; N5 dikirim aplikasi praktikan. Aplikasi tidak mengirim notifikasi ganda untuk satu peristiwa (mis. N2 tidak terkirim lagi saat sesi diubah). N4 dari perubahan lab dikirim satu kali per sesi terdampak.
+N1–N4 dan N6 dikirim **aplikasi asisten**; N5 (belum diimplementasikan) akan dikirim aplikasi praktikan. N6 memakai payload `session_created` sehingga diketuk membuka detail sesi.
+
+**Aturan satu aksi satu notifikasi:** satu aksi ubah sesi menghasilkan **maksimal satu** notifikasi. Lab berubah → hanya N4 (walaupun jam ikut berubah); jam mulai atau jam selesai berubah tanpa perubahan lab → hanya N6; topik saja, simpan tanpa perubahan, atau sesi Ditutup → tidak ada notifikasi. N2 tidak terkirim lagi saat sesi diubah. N4 dari perubahan lab dikirim satu kali per sesi terdampak.
+
+### 4.5 Status Akhir Kebutuhan
+
+Status per **23 Nov 2026** diambil dari audit `main` sebelum gladi (PR #1–#21); status akhir mengikuti `main` terakhir (PR #1–#25). Nilai: **Selesai**, **Sebagian**, **Ditunda**. Butir yang hanya dapat dibuktikan di HP ditandai pada kolom catatan dan dikonfirmasi saat gladi (bagian 9).
+
+| ID | Prioritas | Status per 23 Nov | Status akhir | Catatan / PR |
+| --- | --- | --- | --- | --- |
+| FR-03 | Must | Sebagian | Selesai | Detail sesi benar sejak awal; daftar Jadwal dan halaman izin praktikan meneruskan `labName` serta kedipan "Lab belum diatur" diperbaiki di #22 dan #23 (pasca-batas); #21 |
+| FR-04 | Must | Selesai | Selesai | #9 |
+| FR-07 | Must | Selesai | Selesai | #15 |
+| FR-12 | Must | Sebagian | Sebagian | Seluruh kode tiga alur ada; pembuktian di dua HP dilakukan saat gladi |
+| FR-18 | Must | Selesai | Selesai | #9 |
+| FR-31 | Must | Selesai | Selesai | #7, #12, #14; hasil uji 14 kasus di `docs/README.md` (#19) |
+| FR-32 | Must | Selesai | Selesai | #15, #17; filter "hari ini" memakai tanggal UTC (bagian 16) |
+| FR-33 | Must | Selesai | Selesai | #15; tombol "Presensi" ada pada form sesi terpilih |
+| FR-34 | Must | Selesai | Selesai | #12, #15 |
+| FR-35 | Must | Selesai | Selesai | #12 |
+| FR-36 | Must | Selesai | Selesai | #15 |
+| FR-37 | Must | Selesai | Selesai | #15 |
+| FR-38 | Must | Selesai | Selesai | #12 |
+| FR-39 | Should | Ditunda | Ditunda | Rekap asisten belum menampilkan jarak presensi (data `lokasi` sudah tersedia di `RekapItemHadir`) |
+| FR-40 | Must | Selesai | Selesai | #7, #8 |
+| FR-41 | Must | Selesai | Selesai | #8; koordinat diatur dengan "Pakai lokasi saya" atau **mengetuk** peta (bukan menggeser marker); web memakai input manual |
+| FR-43 | Must | Selesai | Selesai | #7, #10 |
+| FR-44 | Must | Selesai | Selesai | #20, #21; web memakai daftar lab |
+| FR-45 | Could | Ditunda | Ditunda | Presensi QR tidak dikerjakan |
+| FR-46 | Must | Selesai | Selesai | #20 |
+| FR-47 | Must | Selesai | Selesai | #20 |
+| FR-48 | Should | Sebagian | Sebagian | Penanda awalan "•" dan `aria-label` ada; label teks "Dibuka" yang terlihat belum |
+| FR-49 | Could | Ditunda | Ditunda | Peta kecil di rekap tidak dikerjakan |
+| FR-50 | Must | Sebagian | Selesai | Per 23 Nov token tidak terdaftar setelah daftar akun atau ganti akun tanpa restart; diperbaiki di #22 (pasca-batas): `registerDevice` dipanggil setiap `currentUser.id` berganti |
+| FR-51 | Must | Selesai | Selesai | #16; N6 ditambah di #25 |
+| FR-52 | Must | Selesai | Selesai | #14; ketuk dari kondisi cold start dikonfirmasi di HP |
+| FR-53 | Must | Selesai | Selesai | #14 |
+| FR-54 | Should | Ditunda | Ditunda | `sendPush` mengembalikan token yang ditolak, tetapi belum ada yang menghapusnya dari `devices` |
+| FR-55 (N5) | Could | Ditunda | Ditunda | Notifikasi izin baru ke asisten tidak dikerjakan |
+| FR-56 | Must | Selesai | Selesai | #11, #15 |
+| FR-57 | Must | Selesai | Selesai | #11, #15 |
+| FR-58 | Must | Selesai | Selesai | #15, #20; tampilnya peta saat offline dikonfirmasi di HP |
+| FR-59 | Should | Ditunda | Ditunda | Status izin notifikasi di profil tidak dikerjakan; aplikasi tetap berjalan bila izin ditolak |
+| N6 | Tambahan (pasca-batas) | Belum ada | Selesai | #25; peristiwa baru "Jadwal berubah" (4.4) |
+| NFR-13 | NFR | Selesai | Selesai | Watch posisi hanya selama layar presensi, peta, atau form lab terbuka dan dihentikan saat aplikasi ke latar belakang; posisi hanya ditulis ke server saat presensi berhasil |
+| NFR-14 | NFR | Dibuktikan saat gladi | Dibuktikan saat gladi | Waktu tiba notifikasi hanya dapat diukur di HP |
+| NFR-15 | NFR | Dibuktikan saat gladi | Dibuktikan saat gladi | Peta dan panel memakai listener realtime; ≤ 3 detik diukur di HP |
+| NFR-16 | NFR | Selesai | Selesai | Status lokasi berupa teks, tombol peta ber-`aria-label` dan ≥ 44dp, marker lab berawalan "•" |
+| NFR-17 | NFR | Selesai | Selesai | Firebase Spark, Expo Push Service, OpenFreeMap; atribusi tampil satu kali; tanpa polling |
+| NFR-18 | NFR | Selesai | Selesai | Watch memakai akurasi seimbang, interval 5 detik / 5 meter, berhenti di latar belakang |
+
+Ringkasan: seluruh kebutuhan **Must** terpenuhi kecuali FR-12 yang menunggu pembuktian gladi; kebutuhan **Should** FR-39, FR-54, FR-59 ditunda dan FR-48 sebagian; kebutuhan **Could** FR-45, FR-49, FR-55 ditunda. Penundaan dicatat sebagai backlog di bagian 16.
 
 ## 5. Integrasi AI
 
@@ -356,8 +440,8 @@ Tidak berubah dari v2.2 bagian 5.
 | --- | --- | --- |
 | `labs` | Semua pengguna login | Asisten, dengan validasi field (4.2) |
 | `sessions` | Tetap | Tambahan: `labId` wajib saat create dan merujuk lab yang ada; saat Dibuka, `changedOnly` kini `['topik', 'labId', 'endAt', 'updatedAt']` |
-| `attendances` | Tetap | Tambahan saat create: `labId` = `labId` sesi; bukti `lokasi` lengkap; `jarakM` ≤ `radiusM` lab; `akurasiM` ≤ 50; `mocked == false` |
-| `users/{uid}/devices` | Pemilik; asisten | Buat/ubah: pemilik. Hapus: pemilik; asisten (token ditolak, FR-54) |
+| `attendances` | Tetap | Tambahan saat create: `labId` = `labId` sesi; `lokasi` berupa map dengan tepat lima kunci (`hasOnly` dan `hasAll`: `lat`, `lng`, `akurasiM`, `jarakM`, `mocked`), `lat` −90..90, `lng` −180..180, `akurasiM` 0..50, `jarakM` 0..`radiusM` lab, `mocked` bertipe boolean dan bernilai `false`. Sesi lama tanpa `labId` ditolak |
+| `users/{uid}/devices` | Pemilik; asisten | Buat/ubah: pemilik, dengan tepat tiga kunci (`token`, `platform`, `updatedAt`), `token` string 1–200 karakter, `platform in ['android', 'ios']`, `updatedAt` bertipe timestamp. Hapus: pemilik; asisten (token ditolak, FR-54) |
 
 ### 6.3 Sketsa Rules (tambahan pada sketsa v2.2)
 
@@ -386,6 +470,8 @@ match /labs/{labId} {
 //   request.resource.data.keys().hasOnly(['sessionId','userId','kelas','code','timestamp','labId','lokasi'])
 //   && request.resource.data.labId == sessionOf(request.resource.data.sessionId).labId
 //   && request.resource.data.lokasi.mocked == false
+// (rules final menambah: lokasi is map, hasOnly + hasAll 5 kunci, rentang lat/lng, akurasiM dan jarakM ≥ 0,
+//  mocked is bool; lihat firestore.rules)
 //   && request.resource.data.lokasi.akurasiM <= 50
 //   && request.resource.data.lokasi.jarakM <= labOf(request.resource.data.labId).radiusM
 
@@ -393,12 +479,15 @@ match /users/{uid}/devices/{deviceId} {
   allow read: if signedIn() && (request.auth.uid == uid || isAsisten());
   allow create, update: if signedIn() && request.auth.uid == uid
     && request.resource.data.keys().hasOnly(['token','platform','updatedAt'])
-    && request.resource.data.token is string;
+    && request.resource.data.token is string
+    && request.resource.data.token.size() > 0 && request.resource.data.token.size() <= 200
+    && request.resource.data.platform in ['android', 'ios']
+    && request.resource.data.updatedAt is timestamp;
   allow delete: if signedIn() && (request.auth.uid == uid || isAsisten());
 }
 ```
 
-Sketsa ini acuan logika. Rules final diuji di emulator sebelum di-deploy (6.5) dan hanya di-deploy oleh Dhimas.
+Sketsa ini acuan logika; `firestore.rules` di repo lebih ketat pada `attendances.lokasi` dan `devices` (6.2). Rules final diuji sebelum di-deploy (6.5) dan hanya di-deploy oleh Dhimas.
 
 ### 6.4 Risiko Sisa yang Diterima (tambahan)
 
@@ -408,6 +497,10 @@ Sketsa ini acuan logika. Rules final diuji di emulator sebelum di-deploy (6.5) d
 - **Token praktikan terbaca asisten.** Asisten yang memodifikasi aplikasinya dapat mengirim notifikasi sembarang ke praktikan. Diterima karena asisten adalah pihak tepercaya; pengirim di server terpisah (mis. Cloudflare Workers) masuk backlog.
 - **Perubahan lewat Firebase Console tidak memicu notifikasi**, karena pengirim berada di aplikasi asisten.
 - **OpenFreeMap disediakan apa adanya** dan dapat berubah atau berhenti; cadangan di bagian 14.
+- **iOS eksperimental: isi notifikasi melewati server pihak ketiga.** Untuk token `bark:<key>`, judul dan isi notifikasi (nama praktikum, jadwal, nama lab; tanpa nama orang) dikirim ke `api.day.app` dan diteruskan lewat APNs. Key Bark berfungsi sebagai kredensial pengiriman: siapa pun yang mengetahuinya dapat mengirim notifikasi ke perangkat itu. Mitigasi: key diisi manual oleh pengguna di tab Profil (tidak ada key bawaan di build), disimpan lokal di perangkat, dihapus bersama token `bark:<key>` di `devices` saat logout, dan jalur ini di luar kriteria penerimaan. Token `bark:<key>` terbaca asisten seperti token lain.
+- **Rules `sessions` tidak memeriksa keberadaan `labId` saat update** pada cabang Dijadwalkan dan Dijadwalkan → Dibuka (hanya `create` yang memeriksa); klien yang dimodifikasi dapat menulis `labId` yatim. Dampaknya tampil "Lab belum diatur" dan presensi ditolak `NO_LAB`.
+- **Rules `labs` longgar pada `gedung` (tipe dan panjang) serta `createdBy`, `updatedBy`, `createdAt`**, yang tidak diikat ke identitas pengguna; sesuai sketsa 6.3 tetapi tidak ketat.
+- **Uji rules dicatat manual.** Tidak ada skrip uji rules di repo; 14 kasus dijalankan lewat Rules Playground dan verifikasi live, sehingga tidak dapat diulang otomatis.
 
 ### 6.5 Pengujian Rules
 
@@ -418,6 +511,8 @@ Sembilan kasus v2.2 tetap, ditambah:
 12. Sesi baru tanpa `labId` atau dengan `labId` yang tidak ada ditolak.
 13. Presensi dengan `jarakM` > radius, `akurasiM` > 50, `mocked` = true, atau `labId` berbeda dari sesi ditolak; presensi dengan bukti valid berhasil.
 14. Praktikan tidak dapat membaca `devices` pengguna lain; asisten dapat membaca tetapi tidak dapat membuat atau mengubah `devices` milik pengguna lain.
+
+Hasil 14 kasus (semua lulus) dicatat di `docs/README.md` bagian 8.2 (PR #19). Pengujian dilakukan lewat Rules Playground di Firebase Console dan verifikasi pada rules yang ter-deploy; belum ada skrip uji otomatis (bagian 16).
 
 ## 7. Kebutuhan Non-Fungsional
 
@@ -602,7 +697,7 @@ Rules ditulis **bersama fitur yang membutuhkannya** (D-03, D-05, D-06) karena Fi
 | I-04 | **Kelola lab** (asisten): daftar, form dengan peta, "Pakai lokasi saya", geser marker, lingkaran radius, hapus dengan konfirmasi | FR-40, FR-41, FR-43 | `asisten/lab/**`, `features/lab/LabForm`, `labValidation.ts` | I-01, D-03 | Lab tersimpan dan tampil di peta |
 | I-05 | **Form sesi dengan pilihan lab** dan ubah lab saat Dibuka | FR-04, FR-18 | `asisten/buat`, `features/asisten/SessionForm`, `sessionFormValidation.ts` | I-04 | Sesi baru wajib lab; lab sesi bisa diubah |
 | I-06 | **Peta lab** (asisten dan praktikan) dengan MapLibre + OpenFreeMap dan atribusi OpenStreetMap: marker, posisi sendiri, "Ke posisiku", "Lihat semua lab", panel info lab realtime, pengganti web | FR-44, FR-46–48 | `features/lab/LabMap`, `LabMarker`, `praktikan/(tabs)/peta`, `asisten/peta` | D-09 | Alur 2 lolos |
-| I-07 | Beranda asisten: pintasan Lab dan Peta; rekap dengan jarak presensi (+ peta kecil, Could) | FR-39, FR-49 | `asisten/index`, `asisten/sesi/[id]`, `features/asisten/RekapList` | I-06 | Rekap menampilkan jarak |
+| I-07 | Beranda asisten: pintasan Lab dan Peta; `labName` pada sesi di sisi asisten (FR-03). Rekap dengan jarak presensi dan peta kecil (FR-39, FR-49) **dipangkas** dan ditunda (4.5) | FR-03 | `asisten/index`, `asisten/sesi/[id]` | I-06 | Pintasan Lab dan Peta tampil; nama lab tampil di daftar dan detail sesi asisten |
 | I-08 | Memperbarui `DESIGN.md`: pola status lokasi, permission prompt, peta, panel info lab; merapikan sisa token | n/a | `DESIGN.md` | Tahap 7 | Panduan terdokumentasi |
 
 ### 11.5 Tahapan Pengerjaan
@@ -626,6 +721,7 @@ Catatan urutan:
 - **Jalur kritis** adalah Tahap 0 → Tahap 1. Tanpa APK baru, lokasi, peta, dan notifikasi tidak dapat diuji di HP.
 - Dhimas lebih banyak bekerja di tahap awal (1–4), Ibrahim di tahap tengah (3–5). Selama menunggu, tiap orang boleh menyiapkan pekerjaan di branch-nya sendiri, tetapi **PR dibuka dan di-merge sesuai urutan**.
 - Bila satu tahap tersendat, PM memutuskan apakah tugas Should/Could di tahap itu ditunda (bagian 14), bukan melompati tahap.
+- **Realisasi (v3.3):** urutan tahap dilonggarkan untuk tugas yang tidak berbagi file: I-02 dikerjakan paralel dengan D-05, D-06 paralel dengan I-03, D-07 tidak menunggu I-03, I-06 dan I-07 tidak menunggu D-09, dan I-07 berjalan paralel dengan revisi I-06. I-07 dipangkas menjadi `labName` pada sesi asisten ditambah pintasan Lab dan Peta; rekap dengan jarak dan peta kecil ditunda. PR #22–#25 dikerjakan setelah batas Senin 23 Nov 2026 sebagai perbaikan pasca-audit dan tambahan eksperimental.
 
 ### 11.6 Pengujian dan Penutupan (Tahap 7–8)
 
@@ -642,7 +738,7 @@ Catatan urutan:
 
 ## 12. Alur Git dan Konfigurasi
 
-- `main` diproteksi: semua perubahan **wajib lewat PR**, berlaku juga untuk admin, tanpa push langsung dan tanpa force push. **Approval tidak diwajibkan**: pemilik PR boleh me-merge sendiri setelah `npx tsc --noEmit` lolos dan fiturnya dites. Review rekan tetap dianjurkan, dan **wajib** (minimal komentar setuju dari PM) untuk PR kontrak: `types`, tanda tangan store/hook, struktur Firestore, dan rules. Proteksi tidak boleh dimatikan.
+- `main` diproteksi: semua perubahan **wajib lewat PR**, berlaku juga untuk admin, tanpa push langsung dan tanpa force push. **Merge ke `main` dilakukan PM setelah PR direview.** PR kontrak (`types`, tanda tangan store/hook, struktur Firestore, rules) **menunggu persetujuan PM** sebelum di-merge. Secara teknis proteksi tidak mewajibkan approval (0 approval); aturan di atas adalah aturan proses. Versi 3.1 sempat mengizinkan pemilik PR me-merge sendiri; ketentuan itu diganti di v3.3. Proteksi tidak boleh dimatikan.
 - Branch otomatis dihapus setelah PR di-merge. PR bertumpuk tetap **draft** dan base-nya dipindah ke `main` sebelum di-merge.
 - Branch: `feat/dhimas-<topik>`, `feat/ibrahim-<topik>`, `chore/...`, `fix/...`. Satu tugas (D-xx/I-xx) = satu PR.
 - Commit **head-body**: `feat: ...` / `fix: ...` / `chore: ...` / `docs: ...` huruf kecil, **tanpa scope dalam kurung**, tanpa titik, body menjelaskan kenapa. Tanpa trailer `Co-Authored-By`.
@@ -660,6 +756,7 @@ Catatan urutan:
 - Tidak ada rahasia di repo; tidak ada layanan berbayar atau kartu; atribusi peta tampil.
 - Semua perubahan lewat PR; PR kontrak disetujui PM; tidak ada push langsung ke `main`.
 - `docs/SRS.md`, `docs/README.md`, dan `DESIGN.md` diperbarui. PM memberi sign-off setelah gladi bersama.
+- Status akhir kebutuhan (4.5) dan utang teknis (bagian 16) dicatat; kebutuhan yang ditunda dinyatakan di sana.
 
 ## 14. Risiko dan Catatan
 
@@ -676,6 +773,7 @@ Catatan urutan:
 | Peralihan kepemilikan file Elang ke Ibrahim | Elang menjelaskan struktur UI kit dan sisi asisten di Tahap 0; `DESIGN.md` menjadi acuan |
 | Konflik merge pada `types`, `store`, rules | Pemilik tunggal Dhimas; perubahan kontrak diumumkan dan disetujui PM |
 | Sesi lama tanpa `labId` | Tampil "Lab belum diatur"; presensi ditolak `NO_LAB`; asisten dapat memilih lab lewat ubah sesi |
+| Notifikasi iOS lewat Bark tidak tiba atau `api.day.app` berubah | Di luar kriteria penerimaan; pengiriman Bark dan Expo berjalan paralel dan terpisah sehingga jalur Android tidak terpengaruh (6.4) |
 
 ## 15. Riwayat Perubahan
 
@@ -686,3 +784,78 @@ Catatan urutan:
 | 3.0 | **Sprint 3.** PM Elang; developer Dhimas dan Ibrahim; file milik Elang berpindah ke Ibrahim. Paket Blaze, Cloud Functions + FCM untuk notifikasi berbasis peristiwa (N1–N5), `expo-notifications`, `react-native-maps` (Google), `expo-location` foreground. Halaman presensi khusus, presensi berbasis lokasi dengan bukti lokasi, koleksi `labs` dan pengelolaannya, sesi merujuk `labId`, peta lab dengan posisi perangkat sendiri dan panel aktivitas lab, penanganan izin dan kondisi perangkat. Menambah FR-32 s.d. FR-59, NFR-13 s.d. NFR-18, 5 kasus uji rules, tiga alur demo, struktur file dan tugas P-/D-/I- baru, rencana cadangan bila billing gagal |
 | 3.1 | Pengerjaan diubah dari fase paralel bertanggal menjadi **tahapan berurutan** (11.5) dengan batas Senin; rules ditulis bersama fiturnya (D-03, D-05, D-06) dan D-08 menjadi uji rules menyeluruh; ketergantungan tugas disesuaikan dengan urutan tahap; approval PR tidak diwajibkan kecuali PR kontrak (bagian 12) |
 | 3.2 | Ketentuan biaya: seluruh layanan gratis tanpa kartu. Firebase tetap Spark; notifikasi lewat Expo Push Service dari aplikasi asisten (menggantikan Cloud Functions); peta MapLibre + OpenFreeMap (menggantikan Google Maps); kunci FCM hanya di EAS; rules `devices` dapat dibaca asisten. Keputusan final: `package` `com.ppk01.rawuh`, akun EAS dipegang Dhimas, kode sesi tetap, halaman presensi menampilkan sesi hari ini, Profil pindah ke header Jadwal, konfirmasi asprak dihapus (implementasi dibebaskan). Tugas PM dinomori ulang P-01 s.d. P-07 |
+| 3.3 | **Sinkronisasi dengan implementasi akhir** (`main` terakhir, PR #1–#25). Tabel status akhir kebutuhan (4.5) dengan kebutuhan yang ditunda (FR-39, FR-45, FR-49, FR-54, FR-55, FR-59; FR-48 sebagian). Urutan tahap dilonggarkan untuk tugas yang tidak berbagi file dan I-07 dipangkas (11.5). Kebijakan merge: merge ke `main` oleh PM setelah review, PR kontrak menunggu persetujuan PM; ketentuan v3.1 yang mengizinkan pemilik PR me-merge sendiri diganti (bagian 12). Sinkronisasi isi: tipe `Lab`/`Attendance`/`RekapItemHadir`, `CreateLabInput`, tampilan nama lab dan "Memuat lab…", perilaku store, rules `lokasi` dan `devices`, hasil uji 14 kasus. **Pasca-batas (setelah 23 Nov 2026):** #22 registrasi perangkat saat ganti akun dan nama lab di sisi praktikan; #23 tampilan nama lab, atribusi peta, dan layout peta asisten; #24 iOS eksperimental lewat LiveContainer dan relay Bark, serta perbaikan kamera peta; #25 satu aksi ubah sesi satu notifikasi, peristiwa N6 "Jadwal berubah", dan perbaikan relay Bark. Menambah bagian 16 (utang teknis dan backlog) |
+
+## 16. Utang Teknis dan Backlog
+
+Butir berikut diketahui pada `main` terakhir dan tidak menghalangi alur demo Android. Kolom **Usulan** adalah arah perbaikan, bukan keputusan. Butir bertanda *(HP)* hanya dapat dibuktikan di perangkat. Backlog Sprint 2 dan di luar lingkup (1.2) tetap berlaku.
+
+### 16.1 Notifikasi
+
+| Butir | Dampak | Usulan |
+| --- | --- | --- |
+| Token yang ditolak tidak dihapus (FR-54): `sendPush` mengembalikan daftar token, tetapi tidak ada pemanggil yang menghapusnya dari `devices` | Token basi menumpuk; pengiriman sia-sia | Hapus token yang dikembalikan setelah pengiriman |
+| Pembacaan token N+1: `getDeviceTokensForUser` dipanggil per penerima | Kuota baca Firestore (Spark) naik sebanding jumlah praktikan | Gabungkan pembacaan atau batasi jumlah penerima per aksi |
+| N2 mungkin ganda saat kirim ulang `createSession` dengan id sama bila dokumen sudah tersimpan tetapi belum masuk cache | Praktikan menerima "Jadwal baru" dua kali | Kirim N2 hanya bila dokumen benar-benar baru dibuat |
+| N4 setelah `kelas` ikut berubah hanya menuju kelas baru (penerima dihitung dari sesi hasil perubahan) | Kelas lama tidak diberi tahu bahwa lab berubah | Hitung penerima dari kelas lama dan baru, atau larang ubah kelas pada sesi yang sudah dijadwalkan |
+| Mengganti `kelas` sesi tidak memicu notifikasi apa pun | Praktikan kelas lama dan baru tidak diberi tahu | Tetapkan kebijakan notifikasi untuk perubahan kelas |
+| Token akun lama tertinggal bila logout dilakukan offline (penghapusan 10 detik kedaluwarsa) | HP masih dapat menerima notifikasi akun lama | Catat penghapusan tertunda dan ulangi saat online atau saat login berikutnya |
+| Pengguna iOS dengan token Bark **dan** token Expo sekaligus dapat menerima notifikasi ganda di perangkat yang sama | Notifikasi ganda (di luar demo Android) | Pilih satu jalur per perangkat iOS |
+| Normalisasi kelas pada penerima (`trim` + huruf kecil) lebih longgar daripada pemeriksaan presensi (`===`) | Praktikan dengan penulisan kelas berbeda dapat menerima notifikasi tetapi ditolak `NOT_IN_CLASS` | Samakan aturan pencocokan kelas di notifikasi dan presensi |
+| `handleRemoveBarkKey` di Profil tidak memeriksa hasil `removeDeviceToken` | Key lokal terhapus walau token di server gagal dihapus | Periksa hasil dan tampilkan kesalahan |
+
+### 16.2 Lokasi
+
+| Butir | Dampak | Usulan |
+| --- | --- | --- |
+| GPS yang dinyalakan dari quick settings tidak memicu pengambilan ulang; baru terdeteksi lewat "Coba lagi" *(HP)* | Status `services_off` bertahan sampai pengguna menekan tombol | Dengarkan perubahan layanan lokasi atau ambil ulang saat aplikasi kembali aktif |
+| `enableLocationServices` memanggil `restartWatchIfActive` padahal `refreshLocation` sudah memanggilnya | Restart watch berlebih | Hapus pemanggilan redundan |
+| Kemungkinan race antara start/unmount watch dan `getPosition` yang basi menimpa posisi dari watch *(HP)* | Posisi sesaat mundur | Beri penanda urutan pada pembaruan posisi |
+| `useDistanceToLab` tidak mensyaratkan status `ready`; posisi `low_accuracy` atau `mocked` ikut menghasilkan jarak di panel peta | Jarak tampil walau lokasi belum layak (tombol presensi tetap aman karena memeriksa `ready`) | Kembalikan `null` selain status `ready`, atau beri penanda |
+| `DEV_FAKE_POSITION` di `constants/location.ts` tidak dirancang di SRS v3.2 | Konstanta pengembangan (bernilai `null`) di kode produksi | Pertahankan hanya untuk `__DEV__` atau hapus |
+
+### 16.3 Peta
+
+| Butir | Dampak | Usulan |
+| --- | --- | --- |
+| `LabMap.tsx` dan `LabMap.web.tsx` menduplikasi logika pemilihan lab, status lokasi, dan panel | Perbaikan harus dilakukan dua kali | Ekstrak hook atau komponen bersama |
+| Hook per item pada daftar lab di web (`useDistanceToLab` di komponen baris) | Biaya render naik sebanding jumlah lab | Hitung jarak di tingkat daftar |
+| `isFocused` memakai `useState` di `LabMap`, `LabMap.web`, dan `PresensiScreen` | Pola tidak seragam dengan `useFocusEffect` | Satukan ke hook fokus bersama |
+| `useLabActivity` menghitung `now` sekali per render tanpa pembaruan berkala | Panel "sedang berlangsung" tidak berganti sampai ada render lain | Perbarui `now` dengan interval atau saat sesi berubah |
+| Marker lab tidak menampilkan teks "Dibuka" yang terlihat dan posisi sendiri tidak berlabel teks "Kamu" (hanya `aria-label`) | FR-48 sebagian; NFR-16 hanya terpenuhi lewat `aria-label` dan awalan "•" | Tambahkan label teks pada marker |
+
+### 16.4 Presensi dan jadwal
+
+| Butir | Dampak | Usulan |
+| --- | --- | --- |
+| `useTodaySessionsForAttendance` memfilter "hari ini" dengan tanggal UTC | Sesi bertanggal lokal antara 00.00 dan 07.00 WIB tidak tampil di hari yang benar | Bandingkan dengan tanggal lokal perangkat |
+| Halaman presensi tidak memakai `sessionId` dari N1 dan memilih sesi pertama yang dapat dipresensi | Bila ada dua sesi Dibuka hari itu, sesi yang dibuka dari notifikasi bisa tidak terpilih | Teruskan `sessionId` sebagai parameter rute |
+
+### 16.5 Arsitektur dan kualitas
+
+| Butir | Dampak | Usulan |
+| --- | --- | --- |
+| `praktikan/(tabs)/profil.tsx` mengimpor `services/bark` dan `services/notifications` langsung | Melanggar aturan "halaman tidak mengimpor `services/`" | Pindahkan ke aksi store atau hook |
+| `features/praktikan/PresensiForm.tsx` dan `PresensiSheet.tsx` tidak diimpor siapa pun | Kode mati dari alur Sprint 2 | Hapus |
+| `Alert.alert` dipanggil di `services/notifications.ts` | Layer data mengandung UI | Pindahkan dialog penjelasan ke lapisan UI |
+| 11 warning lint (0 error), mis. variabel tak terpakai dan `set-state-in-effect` | Kebersihan kode | Bereskan satu per satu |
+| `tsc` tidak memeriksa typed routes bila `.expo/types` tidak ada (folder `.expo` tidak di-commit) | Salah rute tidak tertangkap di CI/clone baru | Dokumentasikan langkah menghasilkan tipe rute (mis. menjalankan server Expo sekali) sebelum `tsc` |
+| Skrip seed menanam kredensial akun seed, dan `seed-izin.js` menanam konfigurasi Firebase | Tidak konsisten dengan prinsip konfigurasi lewat `.env` | Baca dari `.env` seperti `seed-firebase.js` |
+| Profil `development` di `eas.json` tidak memiliki blok `env` Firebase | Build development tanpa variabel di lingkungan EAS jatuh diam-diam ke mode in-memory | Samakan dengan profil `preview` atau dokumentasikan variabel EAS yang wajib (lihat `docs/README.md`) |
+| Tidak ada ADR untuk keputusan Expo Push Service tanpa server dan MapLibre + OpenFreeMap | Alasan keputusan hanya ada di SRS | Tulis ADR (kepemilikan di 10) |
+
+### 16.6 Data dan rules
+
+| Butir | Dampak | Usulan |
+| --- | --- | --- |
+| Rules `sessions` tidak memeriksa `exists(lab)` saat update pada cabang Dijadwalkan dan Dijadwalkan → Dibuka | `labId` yatim lewat klien termodifikasi | Tambahkan pemeriksaan pada cabang update |
+| Rules `labs` tidak membatasi `gedung` (tipe, panjang) dan tidak mengikat `createdBy`, `updatedBy`, `createdAt` | Data lab bisa tidak konsisten | Ketatkan field tersebut |
+| Uji 14 kasus rules dicatat manual tanpa skrip | Tidak dapat diulang otomatis | Tambahkan uji emulator Firestore |
+| Sesi menulis `ruang: ''` dan sesi lama masih berisi teks `ruang` | Dua sumber nama lokasi | Migrasi sesi lama ke `labId` bila perlu |
+
+### 16.7 Dokumen
+
+| Butir | Dampak | Usulan |
+| --- | --- | --- |
+| Hasil gladi dua HP belum tercatat di dokumen | FR-12, NFR-14, NFR-15 menunggu bukti | Lampirkan hasil gladi pada penutupan sprint |
+| Backlog 1.2 (QR code, pengajuan ulang izin, reset kata sandi, cache offline persisten, Play Integrity, server pengirim terpisah) | Fitur di luar sprint | Rencanakan di sprint berikutnya |
