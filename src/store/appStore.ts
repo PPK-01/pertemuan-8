@@ -53,7 +53,7 @@ import {
   submitIzin as svcSubmitIzin,
 } from '@/services/izin';
 import { classifyIzin } from '@/services/ai';
-import { getSavedBarkKey, toBarkDeviceToken } from '@/services/bark';
+import { clearBarkKeyLocally, getSavedBarkKey, toBarkDeviceToken } from '@/services/bark';
 import { connectionService } from '@/services/connection';
 import { devWarn } from '@/services/devLog';
 import { isFirebaseReady } from '@/services/firebase';
@@ -347,17 +347,13 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const user = get().currentUser;
     if (user) {
       // Hapus token perangkat saat logout (FR-50); race timeout 10 detik agar tidak hang saat offline
+      let barkKey: string | null = null;
       try {
+        barkKey = Platform.OS === 'ios' ? await getSavedBarkKey() : null;
         await Promise.race([
           Promise.all([
             svcRemoveDeviceToken(user.id),
-            Platform.OS === 'ios'
-              ? getSavedBarkKey().then((barkKey) =>
-                  barkKey
-                    ? svcRemoveDeviceToken(user.id, toBarkDeviceToken(barkKey))
-                    : undefined,
-                )
-              : Promise.resolve(),
+            barkKey ? svcRemoveDeviceToken(user.id, toBarkDeviceToken(barkKey)) : undefined,
           ]),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('TIMEOUT')), 10000),
@@ -365,6 +361,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ]);
       } catch (err) {
         devWarn('logout-removeDeviceToken', err);
+      }
+      // Key Bark milik perangkat/akun ini; hapus lokal agar akun berikutnya tidak ikut mendaftarkannya
+      if (Platform.OS === 'ios') {
+        await clearBarkKeyLocally().catch((err) => {
+          devWarn('logout-clearBarkKey', err);
+        });
       }
     }
     const res = await authLogout();
