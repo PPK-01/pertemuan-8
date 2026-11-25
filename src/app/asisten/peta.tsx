@@ -11,7 +11,7 @@ export default function AsistenPetaScreen() {
   return (
     <View style={styles.container}>
       <AppBar subtitle="Peta lab" canGoBack onGoBack={goBack} />
-      <Screen edges={['left', 'right', 'bottom']}>
+      <Screen scroll={false} noPadding edges={['left', 'right', 'bottom']}>
         <View style={styles.content}>
           <LabMap role="asisten" />
         </View>
