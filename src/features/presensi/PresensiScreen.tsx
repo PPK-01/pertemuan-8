@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import type { AppStateStatus } from 'react-native';
 
+import { isLabsLoading, pickLabName, resolveLabText } from '@/components/session/labText';
 import { Banner } from '@/components/ui/Banner';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -63,6 +64,7 @@ export function PresensiScreen() {
   const todaySessions = useTodaySessionsForAttendance();
   const isOnline = useIsOnline();
   const sessionsSync = useSyncState('sessions');
+  const labsSync = useSyncState('labs');
   const attendancesSync = useSyncState('attendances');
   const syncRetry = useSyncRetry(PRESENSI_SYNC_KEYS);
   const submitAttendance = useAppStore((state) => state.submitAttendance);
@@ -205,7 +207,10 @@ export function PresensiScreen() {
     }
   };
 
-  const activeLabNama = activeLab?.nama || activeSession?.ruang || 'Lab belum diatur';
+  const activeLabNama = resolveLabText(
+    pickLabName(activeSession?.labId, activeLab?.nama, isLabsLoading(labsSync)),
+    activeSession?.ruang,
+  ).text;
 
   return (
     <View style={styles.flex}>

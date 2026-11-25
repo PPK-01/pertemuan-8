@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { IzinStatusBadge } from '@/components/izin/IzinStatusBadge';
+import { isLabsLoading, pickLabName } from '@/components/session/labText';
 import { SessionInfo } from '@/components/session/SessionInfo';
 import { AppBar } from '@/components/ui/AppBar';
 import { Button } from '@/components/ui/Button';
@@ -9,7 +10,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Screen } from '@/components/ui/Screen';
 import { IZIN_STATUS_DESCRIPTION } from '@/features/praktikan/izinMessages';
-import { useIzinById, useLabForSession, useSessionById } from '@/store/appStore';
+import { useIzinById, useLabForSession, useSessionById, useSyncState } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -22,6 +23,8 @@ export default function DetailIzinScreen() {
   const izin = useIzinById(izinId);
   const session = useSessionById(izin?.sessionId ?? '');
   const lab = useLabForSession(session?.id);
+  const labsLoading = isLabsLoading(useSyncState('labs'));
+  const labName = pickLabName(session?.labId, lab?.nama, labsLoading);
 
   if (!izin) {
     return (
@@ -98,7 +101,7 @@ export default function DetailIzinScreen() {
           {session ? (
             <Card>
               <Text style={styles.sectionHeader}>Sesi Praktikum Terkait</Text>
-              <SessionInfo session={session} labName={lab?.nama} />
+              <SessionInfo session={session} labName={labName} />
             </Card>
           ) : null}
 

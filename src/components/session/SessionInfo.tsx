@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import type { ReactNode } from 'react';
 
+import { resolveLabText } from '@/components/session/labText';
 import { formatSessionTime, sessionTimeText } from '@/components/session/sessionTime';
 import { StatusBadge } from '@/components/session/StatusBadge';
 import { colors } from '@/theme/colors';
@@ -15,13 +16,14 @@ export type SessionInfoProps = {
   style?: StyleProp<ViewStyle>;
   /**
    * Nama laboratorium yang dirujuk session (FR-03).
-   * Urutan tampilan: labName -> ruang (sesi lama) -> "Lab belum diatur".
+   * `string`: nama lab. `''`: lab sedang dimuat ("Memuat lab…"). `undefined`: `ruang` sesi lama,
+   * selain itu "Lab belum diatur".
    */
   labName?: string;
 };
 
 export function SessionInfo({ session, style, labName }: SessionInfoProps) {
-  const lokasiText = labName || session.ruang || 'Lab belum diatur';
+  const lab = resolveLabText(labName, session.ruang);
 
   const valueText = (text: string, textStyle: TextStyle = styles.valueText) => (
     <Text style={textStyle} numberOfLines={1}>
@@ -33,7 +35,10 @@ export function SessionInfo({ session, style, labName }: SessionInfoProps) {
     { label: 'Praktikum', value: valueText(session.praktikum) },
     { label: 'Kelas', value: valueText(session.kelas) },
     { label: 'Topik', value: valueText(session.topik) },
-    { label: 'Laboratorium', value: valueText(lokasiText) },
+    {
+      label: 'Laboratorium',
+      value: valueText(lab.text, lab.loading ? styles.loadingText : styles.valueText),
+    },
     { label: 'Waktu', value: valueText(formatSessionTime(session), styles.timeText) },
     { label: 'Status', value: <StatusBadge status={session.status} /> },
   ];
@@ -58,5 +63,6 @@ const styles = StyleSheet.create({
   row: { gap: spacing.xs },
   label: { ...typography.label, color: colors.textMuted },
   valueText: { ...typography.body, color: colors.text },
+  loadingText: { ...typography.body, color: colors.textMuted },
   timeText: { ...sessionTimeText, color: colors.text },
 });

@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { isLabsLoading, pickLabName } from '@/components/session/labText';
 import { SessionInfo } from '@/components/session/SessionInfo';
 import { AppBar } from '@/components/ui/AppBar';
 import { Banner } from '@/components/ui/Banner';
@@ -16,6 +17,7 @@ import {
   useIzinByUser,
   useLabForSession,
   useSessionById,
+  useSyncState,
 } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
@@ -29,6 +31,8 @@ export default function PengajuanIzinBaruScreen() {
   const currentUser = useCurrentUser();
   const session = useSessionById(sessionId);
   const lab = useLabForSession(sessionId);
+  const labsLoading = isLabsLoading(useSyncState('labs'));
+  const labName = pickLabName(session?.labId, lab?.nama, labsLoading);
   const alreadyAttended = useHasAttended(sessionId, currentUser?.id ?? '');
   const izinList = useIzinByUser(currentUser?.id ?? '');
   const existingIzin = izinList.find((i) => i.sessionId === sessionId);
@@ -130,7 +134,7 @@ export default function PengajuanIzinBaruScreen() {
           {errorMessage ? <Banner tone="danger" message={errorMessage} /> : null}
 
           <Card>
-            <SessionInfo session={session} labName={lab?.nama} />
+            <SessionInfo session={session} labName={labName} />
           </Card>
 
           <IzinForm onSubmit={handleSubmit} submitting={submitting} />

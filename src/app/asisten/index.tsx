@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { isLabsLoading, pickLabName } from '@/components/session/labText';
 import { AppBar } from '@/components/ui/AppBar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IdentityCard } from '@/components/ui/IdentityCard';
@@ -170,9 +171,11 @@ export default function AsistenHomeScreen() {
             data={filteredSessions}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => {
-              const labName = item.labId
-                ? labNameMap.get(item.labId) ?? (labsSync === 'ready' ? undefined : '')
-                : undefined;
+              const labName = pickLabName(
+                item.labId,
+                item.labId ? labNameMap.get(item.labId) : undefined,
+                isLabsLoading(labsSync),
+              );
               return <SessionListItem session={item} labName={labName} />;
             }}
             ItemSeparatorComponent={ListSeparator}

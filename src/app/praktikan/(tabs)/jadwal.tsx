@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { isLabsLoading, pickLabName } from '@/components/session/labText';
 import { SessionRow } from '@/components/session/SessionRow';
 import { AppBar } from '@/components/ui/AppBar';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -38,6 +39,7 @@ export default function JadwalScreen() {
   const attendances = useAttendanceByUser(userId);
   const izinList = useIzinByUser(userId);
   const labs = useLabs();
+  const labsLoading = isLabsLoading(useSyncState('labs'));
 
   // FR-03: lookup labId -> nama lab sekali per perubahan labs, bukan hook per baris.
   const labNameById = useMemo(() => new Map(labs.map((lab) => [lab.id, lab.nama])), [labs]);
@@ -150,7 +152,11 @@ export default function JadwalScreen() {
                     })
                   }
                   footerText={footerText}
-                  labName={item.labId ? labNameById.get(item.labId) : undefined}
+                  labName={pickLabName(
+                    item.labId,
+                    item.labId ? labNameById.get(item.labId) : undefined,
+                    labsLoading,
+                  )}
                 />
               );
             }}

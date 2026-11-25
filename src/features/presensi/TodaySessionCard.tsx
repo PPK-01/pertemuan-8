@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { isLabsLoading, pickLabName, resolveLabText } from '@/components/session/labText';
 import { StatusBadge } from '@/components/session/StatusBadge';
 import { formatSessionTime } from '@/components/session/sessionTime';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { useLabForSession } from '@/store/appStore';
+import { useLabForSession, useSyncState } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -36,7 +37,10 @@ function StatusPill({ label, tone }: { label: string; tone: StatusPillTone }) {
 export function TodaySessionCard({ item, isSelected, onSelect }: TodaySessionCardProps) {
   const { session, attendance, izin, canAttend } = item;
   const lab = useLabForSession(session.id);
-  const labNama = lab?.nama || session.ruang || 'Lab belum diatur';
+  const labNama = resolveLabText(
+    pickLabName(session.labId, lab?.nama, isLabsLoading(useSyncState('labs'))),
+    session.ruang,
+  ).text;
 
   return (
     <Card style={[styles.card, isSelected && styles.selectedCard]}>
