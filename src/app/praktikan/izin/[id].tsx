@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Screen } from '@/components/ui/Screen';
 import { IZIN_STATUS_DESCRIPTION } from '@/features/praktikan/izinMessages';
-import { useIzinById, useSessionById } from '@/store/appStore';
+import { useIzinById, useLabForSession, useSessionById } from '@/store/appStore';
 import { colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -21,6 +21,7 @@ export default function DetailIzinScreen() {
 
   const izin = useIzinById(izinId);
   const session = useSessionById(izin?.sessionId ?? '');
+  const lab = useLabForSession(session?.id);
 
   if (!izin) {
     return (
@@ -97,7 +98,7 @@ export default function DetailIzinScreen() {
           {session ? (
             <Card>
               <Text style={styles.sectionHeader}>Sesi Praktikum Terkait</Text>
-              <SessionInfo session={session} />
+              <SessionInfo session={session} labName={lab?.nama} />
             </Card>
           ) : null}
 
