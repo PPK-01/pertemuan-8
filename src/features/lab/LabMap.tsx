@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -74,15 +74,6 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
     }, []),
   );
 
-  const selectedLab = useMemo(
-    () => (selectedLabId ? labs.find((l) => l.id === selectedLabId) ?? (labs[0] ?? null) : (labs[0] ?? null)),
-    [labs, selectedLabId],
-  );
-
-  const labActivity = useLabActivity(selectedLab?.id);
-  const distanceInfo = useDistanceToLab(selectedLab?.id);
-
-  // Lab IDs with open sessions for FR-48
   const labsWithOpenSession = useMemo(() => {
     const openSet = new Set<string>();
     for (const s of sessions) {
@@ -92,6 +83,40 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
     }
     return openSet;
   }, [sessions]);
+
+  const selectedLab = useMemo(() => {
+    if (selectedLabId) {
+      return labs.find((l) => l.id === selectedLabId) ?? labs[0] ?? null;
+    }
+    return labs.find((l) => labsWithOpenSession.has(l.id)) ?? labs[0] ?? null;
+  }, [labs, selectedLabId, labsWithOpenSession]);
+
+  const labActivity = useLabActivity(selectedLab?.id);
+  const distanceInfo = useDistanceToLab(selectedLab?.id);
+
+  // Pindahkan kamera dari titik fallback awal begitu posisi user atau data lab dari Firestore tersedia
+  const hasAutoCenteredRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoCenteredRef.current) return;
+    if (location.status === 'ready' && location.position) {
+      hasAutoCenteredRef.current = true;
+      cameraRef.current?.flyTo({
+        center: [location.position.lng, location.position.lat],
+        zoom: DEFAULT_ZOOM,
+        duration: 600,
+      });
+      return;
+    }
+    if (labs.length > 0) {
+      const targetLab = labs.find((l) => labsWithOpenSession.has(l.id)) ?? labs[0];
+      hasAutoCenteredRef.current = true;
+      cameraRef.current?.flyTo({
+        center: [targetLab.lng, targetLab.lat],
+        zoom: DEFAULT_ZOOM,
+        duration: 600,
+      });
+    }
+  }, [location.status, location.position, labs, labsWithOpenSession]);
 
   // Initial center coordinates
   const initialCenter: [number, number] = useMemo(() => {
@@ -288,7 +313,7 @@ export function LabMap({ role = 'praktikan' }: LabMapProps) {
           {/* Marker Semua Lab */}
           {labs.map((lab) => (
             <LabMarker
-              key={lab.id}
+              key={`${lab.id}-${lab.lat}-${lab.lng}`}
               lab={lab}
               hasOpenSession={labsWithOpenSession.has(lab.id)}
               isSelected={selectedLab?.id === lab.id}
