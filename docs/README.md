@@ -1,111 +1,169 @@
-# Presensi Praktikum Rawuh - Sprint 2 (Dhimas: Fondasi Data, Auth, AI & Praktikan)
+# Panduan Setup Proyek Rawuh
 
-Dokumen ini merangkum panduan konfigurasi, arsitektur, dan pengujian untuk lingkup kerja **Dhimas** pada Sprint 2 aplikasi Presensi Praktikum **Rawuh** (React Native + Firebase + AI). Dokumen kebutuhan perangkat lunak mengacu pada `docs/arsip/SRS-v2.2-sprint-2.md`.
-
----
-
-## 1. Cakupan Tugas Dhimas (D-01 s.d. D-12)
-
-1. **D-01 & D-02**: Fondasi Firebase Modular JS SDK (`firebase`), konfigurasi `src/config/env.ts`, safe wrapper untuk storage dan network connectivity.
-2. **D-03**: Pembaruan kontrak tipe `src/types/index.ts` (Sprint 2) dan store terpadu `src/store/appStore.ts`.
-3. **D-04**: Firebase Security Rules (`firestore.rules`), `firestore.indexes.json`, `firebase.json` dengan pengujian 9 kasus keamanan.
-4. **D-05**: Sistem Autentikasi Firebase (`services/auth.ts`, `services/users.ts`), gate rute per peran, layar `login.tsx` & `daftar.tsx`, serta `KeluarButton`.
-5. **D-06**: Sinkronisasi Firestore Realtime (`store/sync.ts`), listener per peran, mapping error Indonesia (`services/errors.ts`), timeout 10 detik, dan penanganan offline.
-6. **D-07**: Layanan Sesi & Kelas (`services/sessions.ts`, `services/kelas.ts`) dengan pemisahan kode 4 digit ke subdokumen `private/code`.
-7. **D-08**: Alur Presensi Praktikan: validasi kode sesi, pra-cek offline/sesi/kelas/duplikasi, rekaman waktu server, dan tab Riwayat dengan ringkasan kehadiran & izin.
-8. **D-09**: Fitur Pengajuan Izin Praktikan: validasi alasan (10–500 karakter), penyimpanan `izin/{sessionId}_{uid}`, tab Izin, dan layar detail izin.
-9. **D-10**: Integrasi AI (`services/ai.ts`): klasifikasi alasan izin menggunakan Model Sentimen EDOM lokal (*on-device inference* murni JavaScript).
-10. **D-11**: Logika rekapitulasi `computeRekap` yang memperhitungkan izin disetujui (FR-10, FR-28).
-11. **D-12**: Dokumentasi teknis proyek.
+Panduan ini membantu anggota baru menjalankan aplikasi **Rawuh** (presensi praktikum) dari nol, memahami perbedaan *development build* dan *preview*, mengirim notifikasi uji, serta memeriksa Firestore rules. Kebutuhan perangkat lunak ada di [SRS.md](./SRS.md) (v3.3), pola desain di [../DESIGN.md](../DESIGN.md), dan panduan iOS eksperimental di [../IOS_LIVECONTAINER_GUIDE.md](../IOS_LIVECONTAINER_GUIDE.md).
 
 ---
 
-## 2. Arsitektur Dual-Mode Runtime
+## 1. Gambaran Singkat
 
-Aplikasi dirancang dengan **Dual-Mode Engine**:
-1. **Mode Firebase Cloud (Produksi / Staging)**: Aktif otomatis saat variabel `EXPO_PUBLIC_FIREBASE_*` diisi di file `.env`. Terhubung langsung ke Firebase Authentication dan Cloud Firestore secara realtime.
-2. **Mode In-Memory Fallback (Lokal / Web)**: Aktif otomatis jika `.env` belum diisi. Memungkinkan pengujian lokal dan web langsung dijalankan untuk menguji alur auth, presensi, dan izin tanpa crash.
+Rawuh mencatat kehadiran sesi praktikum untuk dua peran: **asisten** (membuat dan membuka sesi, mengelola lab, memeriksa izin, melihat rekap) dan **praktikan** (presensi dengan kode sesi 4 digit di dalam radius lab, mengajukan izin, melihat peta lab dan riwayat). Sprint 3 menambahkan lokasi, peta, dan push notification.
+
+| Lapisan | Teknologi |
+| :--- | :--- |
+| Aplikasi | Expo SDK 57, React Native 0.86, TypeScript strict, Expo Router (`src/app/`), Zustand 5 |
+| Data | Firebase JS SDK modular (Authentication, Cloud Firestore, paket Spark) |
+| Lokasi | `expo-location` (foreground saja) |
+| Peta | `@maplibre/maplibre-react-native` + style OpenFreeMap (tanpa API key) |
+| Notifikasi | `expo-notifications`, Expo Push Service, FCM di Android |
+| AI izin | Model sentimen EDOM lokal (berjalan di perangkat, tanpa API eksternal) |
 
 ---
 
-## 3. Konfigurasi Lingkungan (`.env`)
+## 2. Prasyarat
 
-Salin berkas `.env.example` menjadi `.env` lalu lengkapi variabel berikut:
+- **Node.js 22** (versi yang dipakai CI) dan npm, serta **Git**.
+- **HP Android** (disarankan; demo hanya di Android). Emulator Android boleh dipakai untuk uji non-notifikasi.
+- Akun **Expo** yang menjadi anggota project EAS Rawuh (untuk mengunduh build). Membuat build baru memerlukan hak akses pemegang akun EAS (lihat bagian 4).
+- Akses ke project **Firebase** Rawuh bila ingin memakai data sungguhan (tanpa itu tersedia mode in-memory, bagian 3).
 
-```env
-# Firebase Configuration
-EXPO_PUBLIC_FIREBASE_API_KEY=your_api_key
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
+---
 
-# AI API Integration
-EXPO_PUBLIC_AI_URL=https://api.pengajar.ac.id/v1/classify-izin
-EXPO_PUBLIC_AI_KEY=your_ai_api_key
+## 3. Setup
+
+```bash
+git clone https://github.com/PPK-01/pertemuan-8.git
+cd pertemuan-8
+npm ci
+cp .env.example .env
 ```
 
-> **Catatan Keamanan:** Berkas `.env` telah didaftarkan di `.gitignore` dan dilarang untuk di-commit ke repositori.
+Isi `.env` (nilainya diminta ke pemegang akun Firebase; **jangan di-commit**, `.env` sudah ada di `.gitignore`):
+
+| Variabel | Fungsi |
+| :--- | :--- |
+| `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`, `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID` | Konfigurasi Firebase yang dibaca aplikasi saat bundling |
+| `ASISTEN_INVITE_CODE` | Hanya untuk skrip seed; tidak boleh berawalan `EXPO_PUBLIC_` karena variabel itu ikut tertanam di aplikasi |
+
+**Mode tanpa Firebase (in-memory).** Bila variabel Firebase kosong, aplikasi berjalan otomatis dengan data lokal di memori (data dummy, termasuk beberapa lab). Mode ini cukup untuk menguji tampilan dan alur dasar, tetapi data hilang saat aplikasi ditutup, **notifikasi tidak berfungsi**, dan perilakunya bukan acuan uji akhir. Periksa bahwa variabel Firebase benar-benar terbaca bila data tidak tersimpan.
+
+Pemeriksaan kualitas sebelum membuka PR:
+
+```bash
+npx tsc --noEmit    # atau: npm run typecheck
+npx expo lint       # atau: npm run lint
+```
 
 ---
 
-## 4. Menjalankan Aplikasi
+## 4. Development Build vs Preview
 
-### A. Menjalankan Aplikasi (Expo / Dev Client)
-Mulai development server Metro:
+Aplikasi memakai modul native (MapLibre, notifikasi, lokasi) sehingga **Expo Go tidak dapat dipakai**. Ada dua jenis build Android, keduanya memakai package `com.ppk01.rawuh`:
+
+| | Development build | Preview |
+| :--- | :--- | :--- |
+| Profil di `eas.json` | `development` | `preview` |
+| Berisi | `expo-dev-client`: menampilkan launcher dan **memuat JavaScript dari server Metro** (`npx expo start`) | JavaScript yang **dibekukan saat build** (bundel tetap di APK) |
+| Perubahan kode | Terlihat tanpa build ulang (selama tidak ada modul native baru) | Perlu build baru |
+| Variabel Firebase | Dibaca Metro dari `.env` di laptop | Dibaca saat build dari EAS Environment Variables (lingkungan `preview`) |
+| Cocok untuk | Pengembangan harian | Demo atau uji tanpa laptop |
+
+**Keduanya tidak dapat terpasang bersamaan** karena package sama. Untuk berganti jenis: **logout dari aplikasi → uninstall → pasang build yang lain**. Logout dulu agar token notifikasi akun dihapus dari `users/{uid}/devices`.
+
+**Membedakan build di expo.dev.** Buka halaman *Builds* project Rawuh: tiap build menampilkan **profile** (`development` atau `preview`) dan **commit** sumbernya. Pilih profile yang sesuai kebutuhan, dan untuk preview pastikan commit-nya yang terbaru sebelum dipasang.
+
+**Pemilik akun/project EAS** (saat ini pemegang akun yang ditunjuk di SRS 1.4) yang dapat membuat build baru dan mengelola kredensial. Profil build ada di [../eas.json](../eas.json). Sinkronisasi variabel Firebase dari `.env` ke EAS (untuk preview dan production) dilakukan pemegang akun dengan `npm run build:setup-secrets`.
+
+Perintah build (hanya pemegang akun EAS):
+
+```bash
+npx eas-cli build --platform android --profile development   # development build
+npx eas-cli build --platform android --profile preview       # APK preview
+```
+
+---
+
+## 5. Menjalankan Aplikasi
+
 ```bash
 npx expo start
 ```
-Atau dengan development client:
-```bash
-npx expo start --dev-client
-```
 
-### B. Pengujian Web
-```bash
-npx expo start --web
-```
+1. Pasang development build di HP (bagian 4).
+2. Buka aplikasi; pada launcher pilih server pengembangan yang muncul atau masukkan URL yang ditampilkan terminal.
+3. Pastikan HP dan laptop **berada di jaringan yang sama**.
 
-### C. Verifikasi Kualitas Kode
-```bash
-npx tsc --noEmit
-```
+**Masalah "Host unreachable" / tidak menemukan server:**
 
----
+- HP dan laptop beda jaringan, atau Wi-Fi kampus memblokir komunikasi antar-perangkat. Solusi: gunakan **hotspot** dari HP lain atau laptop, atau jalankan `npx expo start --tunnel` (CLI dapat meminta memasang paket tunnel bila belum ada).
+- Firewall di laptop memblokir port Metro. Izinkan Node.js pada jaringan privat.
 
-## 5. Peta Route Sprint 2 (Area Tanggung Jawab Dhimas)
+**Demo dengan development build.** Agar bundel dimuat seperti rilis (tanpa mode pengembangan), jalankan `npx expo start --no-dev --minify`.
 
-| Route | File Komponen | Deskripsi |
-| :--- | :--- | :--- |
-| `/` | `src/app/index.tsx` | Gate utama: mengarahkan user berdasarkan auth status & peran |
-| `/(auth)/login` | `src/app/(auth)/login.tsx` | Form masuk (Email & Kata Sandi) |
-| `/(auth)/daftar` | `src/app/(auth)/daftar.tsx` | Form registrasi peran Praktikan / Asisten Lab |
-| `/praktikan/jadwal` | `src/app/praktikan/(tabs)/jadwal.tsx` | Daftar jadwal sesi kelas praktikan secara realtime |
-| `/praktikan/izin` | `src/app/praktikan/(tabs)/izin.tsx` | Daftar pengajuan izin praktikan dan status verifikasi |
-| `/praktikan/riwayat` | `src/app/praktikan/(tabs)/riwayat.tsx` | Riwayat presensi dan ringkasan hadir & izin disetujui |
-| `/praktikan/sesi/[id]` | `src/app/praktikan/sesi/[id].tsx` | Detail sesi, form presensi 4 digit, dan tombol ajukan izin |
-| `/praktikan/izin/baru` | `src/app/praktikan/izin/baru.tsx` | Form pengajuan izin (alasan 10–500 karakter) |
-| `/praktikan/izin/[id]` | `src/app/praktikan/izin/[id].tsx` | Detail izin: status, alasan, dan keputusan asisten |
+**Web.** `npx expo start --web` hanya untuk uji tampilan: peta diganti **daftar lab**, lokasi memakai geolocation browser, notifikasi tidak aktif (SRS 1.4).
 
 ---
 
-## 6. Firebase Security Rules (`firestore.rules`)
+## 6. Notifikasi Push
 
-Aturan keamanan menerapkan prinsip *deny-by-default*:
-- `users/{uid}`: Hanya pemilik yang dapat membuat dokumen akunnya sendiri; asisten wajib menyertakan kode undangan yang diverifikasi server.
-- `sessions/{id}`: Praktikan hanya dapat membaca sesi untuk kelasnya; kode 4 digit sesi disimpan di subdokumen `private/code` yang hanya dapat dibaca asisten.
-- `attendances/{sessionId}_{uid}`: Praktikan hanya dapat menulis presensi saat sesi berstatus `open`, kelas sesuai, kode cocok, belum presensi, dan tidak memiliki izin yang telah disetujui. ID dokumen deterministik `{sessionId}_{uid}` mencegah duplikasi presensi di level database.
-- `izin/{sessionId}_{uid}`: Praktikan mengajukan izin dengan status awal `pending_ai`. Asisten adalah satu-satunya pihak yang berhak mengubah status menjadi `approved` atau `rejected` melalui field `review`.
+- **Pengirim:** aplikasi asisten memanggil **Expo Push Service** (`https://exp.host/--/api/v2/push/send`) segera setelah aksi berhasil. Di Android Expo meneruskan lewat **FCM**. Tidak ada server tambahan.
+- **Kredensial FCM:** `google-services.json` ada di repo (tanpa rahasia). **Kunci akun layanan FCM V1 hanya disimpan di kredensial EAS** dan tidak boleh masuk repo, chat, atau dokumen.
+- **Channel Android:** `default`, dibuat sebelum izin notifikasi diminta.
+- **Uji cepat dengan Expo push tool:**
+  1. Login di HP dan izinkan notifikasi.
+  2. Ambil token dari Firestore `users/{uid}/devices` (field `token`, berbentuk `ExponentPushToken[...]`).
+  3. Buka Expo push notifications tool (`https://expo.dev/notifications`), tempel token, isi judul dan isi, serta data JSON, mis. `{"type":"session_opened","sessionId":"<id sesi>"}`.
+  4. Kirim; notifikasi harus tampil dan, bila diketuk, membuka layar sesuai tipe (`session_opened` → halaman presensi, `session_created` dan `location_changed` → detail sesi, `izin_decided` dengan `izinId` → detail izin).
+- **iOS (eksperimental):** notifikasi lewat relay Bark, di luar kriteria penerimaan. Lihat [../IOS_LIVECONTAINER_GUIDE.md](../IOS_LIVECONTAINER_GUIDE.md).
 
-Untuk mendeploy rules:
+---
+
+## 7. Peta
+
+Peta memakai **MapLibre** dengan style vektor **OpenFreeMap** (`https://tiles.openfreemap.org/styles/liberty`): **tanpa API key dan tanpa registrasi**. Atribusi "© OpenStreetMap contributors, OpenFreeMap" **wajib tampil** satu kali di peta. OpenFreeMap disediakan apa adanya; rencana cadangan ada di SRS bagian 14. Komponen MapLibre hanya dipakai di `src/features/lab/`.
+
+---
+
+## 8. Firestore dan Seed Data
+
+**Rules** ada di `firestore.rules` dan **hanya di-deploy oleh pemegang akun Firebase yang ditunjuk**:
+
 ```bash
 firebase deploy --only firestore:rules
 ```
 
-### 6.1 Bukti Uji 14 Kasus Keamanan Rules (DoD & SRS §6.5 Sprint 3)
+Untuk memeriksa apakah rules yang ter-deploy sama dengan repo: buka Firebase Console → Firestore Database → Rules, lalu bandingkan isinya dengan `firestore.rules` di `main`. Bila berbeda, laporkan ke pemegang akun; jangan menyalin rules dari Console ke repo tanpa PR.
 
-Pengujian aturan keamanan Cloud Firestore (`firestore.rules`) diverifikasi menggunakan Rules Playground di Firebase Console, verifikasi live deployment (D-03, D-05, D-06), dan pengujian unit rules. Seluruh pengujian menerapkan prinsip *deny-by-default*, validasi skema ketat (`hasOnly`, `hasAll`), serta pembatasan peran (`isAsisten`, `isPraktikan`, pemilik data).
+**Seed data** (memerlukan `.env` dan akses ke project Firebase; jalankan hanya bila diminta pemegang akun):
+
+```bash
+node scripts/seed-firebase.js   # akun seed, kelas, dan sesi contoh (butuh ASISTEN_INVITE_CODE)
+node scripts/seed-labs.js       # data lab awal (koordinat sementara; atur ulang lewat aplikasi)
+node scripts/seed-izin.js       # data izin contoh
+```
+
+Kata sandi akun seed **tidak ditulis di dokumen ini**; tanyakan ke pemegang akun Firebase. Lab demo untuk gladi dibuat asisten lewat aplikasi dengan "Pakai lokasi saya sekarang".
+
+Akun seed untuk demo dan verifikasi:
+
+- **Asisten**: `dina@rawuh.ac.id`, `raka@rawuh.ac.id`
+- **Praktikan (Kelas A)**: `bagas@rawuh.ac.id`, `citra@rawuh.ac.id`
+- **Praktikan (Kelas B)**: `dani@rawuh.ac.id`, `eka@rawuh.ac.id`
+- **Kode undangan asisten**: disimpan di dokumen `/config/asisten` (field `inviteCode`) dan dibagikan secara privat.
+
+### 8.1 Ringkasan Rules
+
+Prinsip *deny-by-default*:
+
+- `users/{uid}`: pemilik membuat dokumennya; asisten wajib menyertakan kode undangan yang diverifikasi server.
+- `sessions/{id}`: praktikan hanya membaca sesi kelasnya; kode 4 digit di subdokumen `private/code` hanya terbaca asisten.
+- `attendances/{sessionId}_{uid}`: presensi hanya saat sesi `open`, kelas sesuai, kode cocok, belum presensi, tanpa izin disetujui, dengan bukti `lokasi` yang valid (SRS 6.2).
+- `izin/{sessionId}_{uid}`: praktikan mengajukan dengan status awal `pending_ai`; hanya asisten yang memutuskan.
+- `labs`: baca semua pengguna login, tulis asisten dengan validasi field.
+- `users/{uid}/devices/{deviceId}`: token milik pengguna; asisten dapat membaca dan menghapus, tidak dapat membuat atau mengubah.
+
+### 8.2 Bukti Uji 14 Kasus Keamanan Rules (DoD dan SRS 6.5)
+
+Pengujian dilakukan lewat Rules Playground di Firebase Console dan verifikasi pada rules yang ter-deploy (D-03, D-05, D-06; PR #19). Belum ada skrip uji otomatis di repo.
 
 | Nomor Kasus | Skenario | Hasil yang Diharapkan | Hasil Aktual | Status |
 | :-: | :--- | :--- | :--- | :-: |
@@ -124,9 +182,10 @@ Pengujian aturan keamanan Cloud Firestore (`firestore.rules`) diverifikasi mengg
 | 13 | Presensi lokasi: `jarakM` > radius, `akurasiM` > 50, `mocked` = true, atau `labId` berbeda dari sesi | Ditolak jika jarak/akurasi/mocked/labId tidak sesuai; Bukti valid diterima | ALLOWED (bukti valid) / DENIED (pelanggaran lokasi) | PASS |
 | 14 | Manajemen devices (`/users/{uid}/devices`): praktikan membaca token pengguna lain; asisten membaca/mengubah token orang lain | Praktikan dilarang membaca token lain; Asisten diizinkan membaca & menghapus tetapi dilarang membuat/mengubah token orang lain; Pemilik diizinkan kelola tokennya sendiri (token <= 200, platform android/ios) | Sesuai aturan (Praktikan lain DENIED, Asisten baca/hapus ALLOWED, Asisten create/update DENIED, Pemilik ALLOWED) | PASS |
 
-> **Ringkasan DoD Security Sprint 3:** Seluruh 14 kasus pengujian aturan keamanan Cloud Firestore dinyatakan **LULUS (100% PASS)** tanpa celah keamanan (*zero security vulnerability*).
+> **Ringkasan:** 14 dari 14 kasus yang diuji dinyatakan **lulus** pada saat pengujian. Karena pengujian manual, hasil ini perlu diulang bila `firestore.rules` berubah.
 
-### 6.2 Ringkasan Cek Singkat Live Deployment (Sprint 3)
+### 8.3 Ringkasan Cek Singkat Live Deployment (Sprint 3)
+
 1. **D-03 (Lab & Sesi)**: `deleteLab` memverifikasi sesi aktif langsung ke Firestore untuk mencegah orphaned `labId`.
 2. **D-05 (Presensi Lokasi)**: Validasi field `lokasi` (map dengan hasOnly & hasAll 5 kunci: `lat`, `lng`, `akurasiM`, `jarakM`, `mocked`), `akurasiM <= 50`, `jarakM <= radiusM`, `mocked == false`, konsistensi `labId`, serta kompatibilitas mundur dokumen presensi lama Sprint 2.
 3. **D-06 (Perangkat & Notifikasi Push)**: Validasi subkoleksi `devices` (`platform in ['android', 'ios']`, `token.size() <= 200`, `updatedAt is timestamp`), isolasi token antar pengguna, hak asisten membaca/menghapus token, dan pencegahan modifikasi token orang lain.
@@ -134,10 +193,20 @@ Pengujian aturan keamanan Cloud Firestore (`firestore.rules`) diverifikasi mengg
 
 ---
 
-## 7. Akun Seed Uji Coba
+## 9. Struktur Rute Utama
 
-Untuk keperluan demo dan verifikasi:
-- **Asisten**: `dina@rawuh.ac.id`, `raka@rawuh.ac.id` (Kata sandi bebas pada mode fallback)
-- **Praktikan (Kelas A)**: `bagas@rawuh.ac.id`, `citra@rawuh.ac.id`
-- **Praktikan (Kelas B)**: `dani@rawuh.ac.id`, `eka@rawuh.ac.id`
-- **Kode Undangan Asisten**: Dikelola secara rahasia di Cloud Firestore pada dokumen `/config/asisten` (field `inviteCode`) dan dibagikan secara privat (bukan di repositori publik).
+| Rute | Berkas | Isi |
+| :--- | :--- | :--- |
+| `/(auth)/login`, `/(auth)/daftar` | `src/app/(auth)/` | Masuk dan daftar (praktikan atau asisten dengan kode undangan) |
+| `/praktikan/jadwal` | `src/app/praktikan/(tabs)/jadwal.tsx` | Jadwal sesi kelas dengan nama lab |
+| `/praktikan/peta` | `src/app/praktikan/(tabs)/peta.tsx` | Peta lab dan panel info lab |
+| `/praktikan/izin`, `/praktikan/riwayat` | `src/app/praktikan/(tabs)/` | Izin dan riwayat presensi |
+| `/praktikan/presensi` | `src/app/praktikan/presensi.tsx` | Halaman presensi: sesi hari ini, info lokasi, form kode |
+| `/praktikan/sesi/[id]` | `src/app/praktikan/sesi/[id].tsx` | Detail sesi dengan tombol ke halaman presensi dan ajukan izin |
+| `/praktikan/izin/baru`, `/praktikan/izin/[id]` | `src/app/praktikan/izin/` | Form dan detail izin |
+| `/asisten` | `src/app/asisten/index.tsx` | Daftar sesi dengan pintasan Izin, Kelas, Lab, Peta |
+| `/asisten/buat` | `src/app/asisten/buat.tsx` | Form buat/ubah sesi dengan pilihan lab |
+| `/asisten/sesi/[id]` | `src/app/asisten/sesi/[id].tsx` | Detail sesi, kode, dan rekap |
+| `/asisten/lab`, `/asisten/lab/form` | `src/app/asisten/lab/` | Kelola lab (peta, radius, "Pakai lokasi saya") |
+| `/asisten/peta` | `src/app/asisten/peta.tsx` | Peta lab dan panel info lab |
+| `/asisten/izin/**`, `/asisten/kelas/**` | `src/app/asisten/` | Pemeriksaan izin dan kelola kelas |
