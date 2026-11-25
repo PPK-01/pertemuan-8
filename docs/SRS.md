@@ -375,14 +375,14 @@ N1–N4 dan N6 dikirim **aplikasi asisten**; N5 (belum diimplementasikan) akan d
 
 ### 4.5 Status Akhir Kebutuhan
 
-Status per **23 Nov 2026** diambil dari audit `main` sebelum gladi (PR #1–#21); status akhir mengikuti `main` terakhir (PR #1–#25). Nilai: **Selesai**, **Sebagian**, **Ditunda**. Butir yang hanya dapat dibuktikan di HP ditandai pada kolom catatan dan dikonfirmasi saat gladi (bagian 9).
+Status per **23 Nov 2026** diambil dari audit `main` sebelum gladi (PR #1–#21); status akhir mengikuti `main` terakhir (PR #1–#25). Nilai: **Selesai**, **Sebagian**, **Ditunda**. Butir yang hanya dapat dibuktikan di HP ditandai pada kolom catatan dan dikonfirmasi pada gladi 25 Nov 2026 (11.7).
 
 | ID | Prioritas | Status per 23 Nov | Status akhir | Catatan / PR |
 | --- | --- | --- | --- | --- |
 | FR-03 | Must | Sebagian | Selesai | Detail sesi benar sejak awal; daftar Jadwal dan halaman izin praktikan meneruskan `labName` serta kedipan "Lab belum diatur" diperbaiki di #22 dan #23 (pasca-batas); #21 |
 | FR-04 | Must | Selesai | Selesai | #9 |
 | FR-07 | Must | Selesai | Selesai | #15 |
-| FR-12 | Must | Sebagian | Sebagian | Seluruh kode tiga alur ada; pembuktian di dua HP dilakukan saat gladi |
+| FR-12 | Must | Sebagian | Selesai | Bukti: gladi 25 Nov 2026, Alur 1, 2, dan 3 serta skenario tepi lolos (11.7) |
 | FR-18 | Must | Selesai | Selesai | #9 |
 | FR-31 | Must | Selesai | Selesai | #7, #12, #14; hasil uji 14 kasus di `docs/README.md` (#19) |
 | FR-32 | Must | Selesai | Selesai | #15, #17; filter "hari ini" memakai tanggal UTC (bagian 15) |
@@ -414,13 +414,13 @@ Status per **23 Nov 2026** diambil dari audit `main` sebelum gladi (PR #1–#21)
 | FR-59 | Should | Ditunda | Ditunda | Status izin notifikasi di profil tidak dikerjakan; aplikasi tetap berjalan bila izin ditolak |
 | N6 | Tambahan (pasca-batas) | Belum ada | Selesai | #25; peristiwa baru "Jadwal berubah" (4.4) |
 | NFR-13 | NFR | Selesai | Selesai | Watch posisi hanya selama layar presensi, peta, atau form lab terbuka dan dihentikan saat aplikasi ke latar belakang; posisi hanya ditulis ke server saat presensi berhasil |
-| NFR-14 | NFR | Dibuktikan saat gladi | Dibuktikan saat gladi | Waktu tiba notifikasi hanya dapat diukur di HP |
-| NFR-15 | NFR | Dibuktikan saat gladi | Dibuktikan saat gladi | Peta dan panel memakai listener realtime; ≤ 3 detik diukur di HP |
+| NFR-14 | NFR | Dibuktikan saat gladi | Selesai | Dibuktikan saat gladi 25 Nov 2026 (11.7) |
+| NFR-15 | NFR | Dibuktikan saat gladi | Selesai | Peta dan panel memakai listener realtime; dibuktikan saat gladi 25 Nov 2026 (11.7) |
 | NFR-16 | NFR | Selesai | Selesai | Status lokasi berupa teks, tombol peta ber-`aria-label` dan ≥ 44dp, marker lab berawalan "•" |
 | NFR-17 | NFR | Selesai | Selesai | Firebase Spark, Expo Push Service, OpenFreeMap; atribusi tampil satu kali; tanpa polling |
 | NFR-18 | NFR | Selesai | Selesai | Watch memakai akurasi seimbang, interval 5 detik / 5 meter, berhenti di latar belakang |
 
-Ringkasan: seluruh kebutuhan **Must** terpenuhi kecuali FR-12 yang menunggu pembuktian gladi; kebutuhan **Should** FR-39, FR-54, FR-59 ditunda dan FR-48 sebagian; kebutuhan **Could** FR-45, FR-49, FR-55 ditunda. Penundaan dicatat sebagai backlog di bagian 15.
+Ringkasan: seluruh kebutuhan **Must** terpenuhi dan terbukti pada gladi 25 Nov 2026; kebutuhan **Should** FR-39, FR-54, FR-59 ditunda dan FR-48 sebagian; kebutuhan **Could** FR-45, FR-49, FR-55 ditunda. Penundaan dicatat sebagai backlog di bagian 15.
 
 ## 5. Integrasi AI
 
@@ -736,6 +736,22 @@ Catatan urutan:
 | Perbaikan bug | Pemilik file | Elang memantau |
 | Sign-off, rekaman demo, SRS final, README | Elang | Ibrahim menyiapkan tangkapan layar, Dhimas melengkapi README |
 
+### 11.7 Hasil Gladi dan Sign-off
+
+**Tanggal:** Rabu, 25 November 2026. **Perangkat:** HP Android dengan build dari `main` terbaru (setelah PR #25), Firebase sungguhan.
+
+| Cakupan | Hasil |
+| --- | --- |
+| Alur 1: presensi berbasis lokasi | Lolos |
+| Alur 2: peta dan informasi lab | Lolos |
+| Alur 3: notifikasi kegiatan dan perubahan lokasi | Lolos |
+| Skenario tepi (bagian 9) | Lolos |
+| Bug baru | Tidak ditemukan |
+
+**Catatan:** sebuah iPhone ikut dipakai sebagai perangkat tambahan untuk iOS eksperimental (LiveContainer dan relay Bark, di luar kriteria penerimaan). Aplikasi berjalan lancar di perangkat tersebut, termasuk penerimaan notifikasi. Hasil ini tidak menjadi dasar kriteria penerimaan.
+
+**Sign-off (P-06):** berdasarkan hasil di atas, PM (Elang) menyatakan kriteria penerimaan Sprint 3 terpenuhi. Kebutuhan yang ditunda (4.5) dan utang teknis (bagian 15) tetap dicatat sebagai backlog.
+
 ## 12. Alur Git dan Konfigurasi
 
 - `main` diproteksi: semua perubahan **wajib lewat PR**, berlaku juga untuk admin, tanpa push langsung dan tanpa force push. **Merge ke `main` dilakukan PM setelah PR direview.** PR kontrak (`types`, tanda tangan store/hook, struktur Firestore, rules) **menunggu persetujuan PM** sebelum di-merge. Secara teknis proteksi tidak mewajibkan approval (0 approval); aturan di atas adalah aturan proses. Versi 3.1 sempat mengizinkan pemilik PR me-merge sendiri; ketentuan itu diganti di v3.3. Proteksi tidak boleh dimatikan.
@@ -755,7 +771,7 @@ Catatan urutan:
 - Tidak ada `console.error`, tidak ada `any`, tidak ada warna langsung di luar `src/theme`, `npx tsc --noEmit` lolos.
 - Tidak ada rahasia di repo; tidak ada layanan berbayar atau kartu; atribusi peta tampil.
 - Semua perubahan lewat PR; PR kontrak disetujui PM; tidak ada push langsung ke `main`.
-- `docs/SRS.md`, `docs/README.md`, dan `DESIGN.md` diperbarui. PM memberi sign-off setelah gladi bersama.
+- `docs/SRS.md`, `docs/README.md`, dan `DESIGN.md` diperbarui. PM memberi sign-off setelah gladi bersama (11.7).
 - Status akhir kebutuhan (4.5) dan utang teknis (bagian 15) dicatat; kebutuhan yang ditunda dinyatakan di sana.
 
 ## 14. Risiko dan Catatan
@@ -846,7 +862,6 @@ Butir berikut diketahui pada `main` terakhir dan tidak menghalangi alur demo And
 
 | Butir | Dampak | Usulan |
 | --- | --- | --- |
-| Hasil gladi dua HP belum tercatat di dokumen | FR-12, NFR-14, NFR-15 menunggu bukti | Lampirkan hasil gladi pada penutupan sprint |
 | Backlog 1.2 (QR code, pengajuan ulang izin, reset kata sandi, cache offline persisten, Play Integrity, server pengirim terpisah) | Fitur di luar sprint | Rencanakan di sprint berikutnya |
 
 ## 16. Riwayat Perubahan
@@ -858,4 +873,4 @@ Butir berikut diketahui pada `main` terakhir dan tidak menghalangi alur demo And
 | 3.0 | **Sprint 3.** PM Elang; developer Dhimas dan Ibrahim; file milik Elang berpindah ke Ibrahim. Paket Blaze, Cloud Functions + FCM untuk notifikasi berbasis peristiwa (N1–N5), `expo-notifications`, `react-native-maps` (Google), `expo-location` foreground. Halaman presensi khusus, presensi berbasis lokasi dengan bukti lokasi, koleksi `labs` dan pengelolaannya, sesi merujuk `labId`, peta lab dengan posisi perangkat sendiri dan panel aktivitas lab, penanganan izin dan kondisi perangkat. Menambah FR-32 s.d. FR-59, NFR-13 s.d. NFR-18, 5 kasus uji rules, tiga alur demo, struktur file dan tugas P-/D-/I- baru, rencana cadangan bila billing gagal |
 | 3.1 | Pengerjaan diubah dari fase paralel bertanggal menjadi **tahapan berurutan** (11.5) dengan batas Senin; rules ditulis bersama fiturnya (D-03, D-05, D-06) dan D-08 menjadi uji rules menyeluruh; ketergantungan tugas disesuaikan dengan urutan tahap; approval PR tidak diwajibkan kecuali PR kontrak (bagian 12) |
 | 3.2 | Ketentuan biaya: seluruh layanan gratis tanpa kartu. Firebase tetap Spark; notifikasi lewat Expo Push Service dari aplikasi asisten (menggantikan Cloud Functions); peta MapLibre + OpenFreeMap (menggantikan Google Maps); kunci FCM hanya di EAS; rules `devices` dapat dibaca asisten. Keputusan final: `package` `com.ppk01.rawuh`, akun EAS dipegang Dhimas, kode sesi tetap, halaman presensi menampilkan sesi hari ini, Profil pindah ke header Jadwal, konfirmasi asprak dihapus (implementasi dibebaskan). Tugas PM dinomori ulang P-01 s.d. P-07 |
-| 3.3 | **Sinkronisasi dengan implementasi akhir** (`main` terakhir, PR #1–#25). Tabel status akhir kebutuhan (4.5) dengan kebutuhan yang ditunda (FR-39, FR-45, FR-49, FR-54, FR-55, FR-59; FR-48 sebagian). Urutan tahap dilonggarkan untuk tugas yang tidak berbagi file dan I-07 dipangkas (11.5). Kebijakan merge: merge ke `main` oleh PM setelah review, PR kontrak menunggu persetujuan PM; ketentuan v3.1 yang mengizinkan pemilik PR me-merge sendiri diganti (bagian 12). Sinkronisasi isi: tipe `Lab`/`Attendance`/`RekapItemHadir`, `CreateLabInput`, tampilan nama lab dan "Memuat lab…", perilaku store, rules `lokasi` dan `devices`, hasil uji 14 kasus. **Pasca-batas (setelah 23 Nov 2026):** #22 registrasi perangkat saat ganti akun dan nama lab di sisi praktikan; #23 tampilan nama lab, atribusi peta, dan layout peta asisten; #24 iOS eksperimental lewat LiveContainer dan relay Bark, serta perbaikan kamera peta; #25 satu aksi ubah sesi satu notifikasi, peristiwa N6 "Jadwal berubah", dan perbaikan relay Bark. Menambah bagian 15 (utang teknis dan backlog) |
+| 3.3 | **Sinkronisasi dengan implementasi akhir** (`main` terakhir, PR #1–#25). Tabel status akhir kebutuhan (4.5) dengan kebutuhan yang ditunda (FR-39, FR-45, FR-49, FR-54, FR-55, FR-59; FR-48 sebagian). Urutan tahap dilonggarkan untuk tugas yang tidak berbagi file dan I-07 dipangkas (11.5). Kebijakan merge: merge ke `main` oleh PM setelah review, PR kontrak menunggu persetujuan PM; ketentuan v3.1 yang mengizinkan pemilik PR me-merge sendiri diganti (bagian 12). Sinkronisasi isi: tipe `Lab`/`Attendance`/`RekapItemHadir`, `CreateLabInput`, tampilan nama lab dan "Memuat lab…", perilaku store, rules `lokasi` dan `devices`, hasil uji 14 kasus. **Pasca-batas (setelah 23 Nov 2026):** #22 registrasi perangkat saat ganti akun dan nama lab di sisi praktikan; #23 tampilan nama lab, atribusi peta, dan layout peta asisten; #24 iOS eksperimental lewat LiveContainer dan relay Bark, serta perbaikan kamera peta; #25 satu aksi ubah sesi satu notifikasi, peristiwa N6 "Jadwal berubah", dan perbaikan relay Bark. Menambah bagian 15 (utang teknis dan backlog), serta hasil gladi dan sign-off (11.7) |
