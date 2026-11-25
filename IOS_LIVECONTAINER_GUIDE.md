@@ -189,7 +189,7 @@ sequenceDiagram
 
 Implementasi aktif menggunakan [src/services/bark.ts](src/services/bark.ts) yang terintegrasi dengan [src/services/push.ts](src/services/push.ts), [src/store/appStore.ts](src/store/appStore.ts), dan tab Profil di [src/app/praktikan/(tabs)/profil.tsx](src/app/praktikan/(tabs)/profil.tsx):
 
-- **Penyimpanan Token Aman**: Token disimpan di Firestore `users/{uid}/devices/{deviceId}` dengan prefix `bark:<device_key>` (`platform: 'ios'`), sedangkan fallback default lokal dapat diisi melalui variabel `.env` (`EXPO_PUBLIC_BARK_DEVICE_KEY`, tidak di-commit ke git).
+- **Penyimpanan Token Aman**: Token disimpan di Firestore `users/{uid}/devices/{deviceId}` dengan prefix `bark:<device_key>` (`platform: 'ios'`). Key hanya berasal dari input pengguna di tab Profil dan dihapus dari perangkat saat logout, sehingga akun lain tidak ikut memakainya.
 - **Routing Pengiriman**: `sendPush` di `src/services/push.ts` memisahkan token `bark:` untuk dikirim ke `https://api.day.app/push` dengan `url: livecontainer://livecontainer-launch?bundle-name=com.ppk01.rawuh`, sementara token Android tetap lewat Expo Push API.
 - **UI Pengaturan iOS**: Di tab Profil (khusus `Platform.OS === 'ios'`), praktikan dapat mengisi, menyimpan, mengetes langsung ke Lock Screen, atau menghapus Bark Device Key.
 

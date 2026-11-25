@@ -17,6 +17,24 @@ export type PushMessage = {
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const MAX_BATCH_SIZE = 100;
+const QUERY_TIMEOUT_MS = 10000;
+
+/** Menolak dengan Error('TIMEOUT') bila `promise` belum selesai dalam `ms`; timer selalu dibersihkan. */
+function withTimeout<T>(promise: Promise<T>, ms: number = QUERY_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('TIMEOUT')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
 
 /**
  * Format jadwal sesi praktikum untuk isi notifikasi ({hari, tanggal, jam}).
@@ -44,26 +62,41 @@ export async function sendPush(messages: PushMessage[]): Promise<string[]> {
     return [];
   }
 
-  const rejectedTokens: string[] = [];
   const barkMessages = messages.filter((m) => isBarkDeviceToken(m.to));
   const expoMessages = messages.filter((m) => !isBarkDeviceToken(m.to));
 
-  if (barkMessages.length > 0) {
-    const barkResults = await Promise.all(
-      barkMessages.map(async (msg) => {
-        const barkKey = extractBarkKeyFromToken(msg.to);
-        if (!barkKey) return { token: msg.to, invalidDevice: true };
-        const res = await sendBarkNotification(barkKey, msg.title, msg.body);
-        return { token: msg.to, invalidDevice: res.invalidDevice };
-      }),
-    );
+  // Paralel: Bark yang lambat atau gagal tidak boleh menunda notifikasi Expo (Android).
+  const results = await Promise.allSettled([
+    sendExpoMessages(expoMessages),
+    sendBarkMessages(barkMessages),
+  ]);
 
-    for (const r of barkResults) {
-      if (r.invalidDevice) {
-        rejectedTokens.push(r.token);
-      }
+  const rejectedTokens: string[] = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      rejectedTokens.push(...r.value);
+    } else {
+      devWarn('push-sendPushGroup', r.reason);
     }
   }
+  return rejectedTokens;
+}
+
+async function sendBarkMessages(barkMessages: PushMessage[]): Promise<string[]> {
+  if (barkMessages.length === 0) return [];
+  const barkResults = await Promise.all(
+    barkMessages.map(async (msg) => {
+      const barkKey = extractBarkKeyFromToken(msg.to);
+      if (!barkKey) return { token: msg.to, invalidDevice: true };
+      const res = await sendBarkNotification(barkKey, msg.title, msg.body);
+      return { token: msg.to, invalidDevice: res.invalidDevice };
+    }),
+  );
+  return barkResults.filter((r) => r.invalidDevice).map((r) => r.token);
+}
+
+async function sendExpoMessages(expoMessages: PushMessage[]): Promise<string[]> {
+  const rejectedTokens: string[] = [];
 
   for (let i = 0; i < expoMessages.length; i += MAX_BATCH_SIZE) {
     const chunk = expoMessages.slice(i, i + MAX_BATCH_SIZE);
@@ -163,8 +196,8 @@ async function resolvePraktikanUidsForClass(kelas: string, users: User[]): Promi
   let sourceUsers = users;
   if (sourceUsers.length === 0 && isFirebaseReady && db) {
     try {
-      const snap = await getDocs(
-        query(collection(db, 'users'), where('role', '==', 'praktikan')),
+      const snap = await withTimeout(
+        getDocs(query(collection(db, 'users'), where('role', '==', 'praktikan'))),
       );
       sourceUsers = snap.docs.map((d) => {
         const data = d.data();
@@ -236,7 +269,7 @@ export async function notifySessionCreated(
 }
 
 /**
- * Notifikasi perubahan jadwal/detail sesi (waktu, topik, atau mata praktikum).
+ * Notifikasi perubahan jadwal sesi (waktu mulai atau selesai). Tidak dikirim bila lab ikut berubah (N4).
  * Penerima: praktikan kelas sesi tersebut.
  */
 export async function notifySessionUpdated(

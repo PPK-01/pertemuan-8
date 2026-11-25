@@ -48,11 +48,7 @@ export function extractBarkKeyFromToken(token: string): string | null {
 export async function getSavedBarkKey(): Promise<string | null> {
   try {
     const val = await safeStorage.getItem(BARK_STORAGE_KEY);
-    if (val !== null) {
-      return val === '' ? null : parseBarkKey(val);
-    }
-    const envKey = process.env.EXPO_PUBLIC_BARK_DEVICE_KEY;
-    return envKey ? parseBarkKey(envKey) : null;
+    return val ? parseBarkKey(val) : null;
   } catch (err) {
     devWarn('bark-getSavedBarkKey', err);
     return null;
@@ -64,8 +60,7 @@ export async function saveBarkKeyLocally(barkKey: string): Promise<void> {
 }
 
 export async function clearBarkKeyLocally(): Promise<void> {
-  // Simpan string kosong agar fallback env tidak langsung aktif kembali setelah dihapus pengguna
-  await safeStorage.setItem(BARK_STORAGE_KEY, '');
+  await safeStorage.removeItem(BARK_STORAGE_KEY);
 }
 
 /**
