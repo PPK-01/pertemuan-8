@@ -412,14 +412,15 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       oldSession.status !== 'closed' &&
       patch.labId !== undefined &&
       patch.labId !== oldSession.labId;
+    // "Jadwal berubah" hanya bila waktu mulai/selesai berubah (dibandingkan sebagai waktu, bukan string)
+    // dan lab tidak berubah: perubahan lab sudah diberitahukan lewat N4 sehingga satu aksi = satu notifikasi.
+    const sameTime = (a: string, b: string): boolean => new Date(a).getTime() === new Date(b).getTime();
     const scheduleChanged =
       oldSession &&
       oldSession.status !== 'closed' &&
-      ((patch.startAt !== undefined && patch.startAt !== oldSession.startAt) ||
-        (patch.endAt !== undefined && patch.endAt !== oldSession.endAt) ||
-        (patch.topik !== undefined && patch.topik !== oldSession.topik) ||
-        (patch.praktikum !== undefined && patch.praktikum !== oldSession.praktikum) ||
-        (patch.kelas !== undefined && patch.kelas !== oldSession.kelas));
+      !labChanged &&
+      ((patch.startAt !== undefined && !sameTime(patch.startAt, oldSession.startAt)) ||
+        (patch.endAt !== undefined && !sameTime(patch.endAt, oldSession.endAt)));
 
     const res = await withWriteGuard(() => svcUpdateSession(id, patch));
     if (res.ok && oldSession) {
