@@ -16,6 +16,7 @@ import {
   useAttendanceByUser,
   useCurrentUser,
   useIzinByUser,
+  useLabs,
   useSessionsForUser,
   useSyncState,
 } from '@/store/appStore';
@@ -36,6 +37,10 @@ export default function JadwalScreen() {
   const sessions = useSessionsForUser(userId);
   const attendances = useAttendanceByUser(userId);
   const izinList = useIzinByUser(userId);
+  const labs = useLabs();
+
+  // FR-03: lookup labId -> nama lab sekali per perubahan labs, bukan hook per baris.
+  const labNameById = useMemo(() => new Map(labs.map((lab) => [lab.id, lab.nama])), [labs]);
 
   const sessionsSync = useSyncState('sessions');
   const sessionsRetry = useSyncRetry(JADWAL_SYNC_KEYS);
@@ -145,6 +150,7 @@ export default function JadwalScreen() {
                     })
                   }
                   footerText={footerText}
+                  labName={item.labId ? labNameById.get(item.labId) : undefined}
                 />
               );
             }}

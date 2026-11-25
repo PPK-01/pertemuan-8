@@ -7,9 +7,29 @@ import { collection, deleteDoc, doc, getDocs, serverTimestamp, setDoc } from 'fi
 import type { NotifPayload, NotificationPermission, Result, Role } from '@/types';
 import { db, isFirebaseReady } from './firebase';
 import { devWarn } from './devLog';
+import { colors } from '@/theme/colors';
+
+const NETWORK_TIMEOUT_MS = 10000;
 
 let cachedToken: string | null = null;
 let lastHandledColdStartIdentifier: string | null = null;
+
+/** Menolak dengan Error('TIMEOUT') bila `promise` belum selesai dalam `ms`; timer selalu dibersihkan. */
+function withTimeout<T>(promise: Promise<T>, ms: number = NETWORK_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('TIMEOUT')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
 
 // Fallback in-memory jika Firebase belum aktif
 const inMemoryDevices = new Map<
@@ -27,7 +47,7 @@ export async function setupAndroidNotificationChannel(): Promise<void> {
         name: 'default',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#208AEF',
+        lightColor: colors.primary,
       });
     } catch (err) {
       devWarn('notif-setNotificationChannel', err);
@@ -175,9 +195,9 @@ export async function getDeviceToken(): Promise<string | null> {
       Constants?.easConfig?.projectId ??
       '94ab994b-31a4-4bcf-8a08-88672cc4040f';
 
-    const tokenResult = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
+    const tokenResult = await withTimeout(
+      Notifications.getExpoPushTokenAsync({ projectId }),
+    );
 
     cachedToken = tokenResult.data;
     return tokenResult.data;
@@ -239,11 +259,13 @@ export async function saveDeviceToken(
 
   try {
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
-    await setDoc(deviceRef, {
-      token,
-      platform,
-      updatedAt: serverTimestamp(),
-    });
+    await withTimeout(
+      setDoc(deviceRef, {
+        token,
+        platform,
+        updatedAt: serverTimestamp(),
+      }),
+    );
     return { ok: true, data: undefined };
   } catch (err) {
     devWarn('notif-saveDeviceToken', err);
@@ -263,8 +285,20 @@ export async function removeDeviceToken(
   uid: string,
   tokenToRemove?: string,
 ): Promise<Result<void>> {
-  const token = tokenToRemove ?? cachedToken;
-  if (!uid || !token) {
+  if (!uid) {
+    return { ok: true, data: undefined };
+  }
+  // Setelah app dimulai ulang `cachedToken` kosong; ambil ulang token perangkat ini (ber-timeout)
+  // agar akun lama tidak tetap menerima notifikasi setelah logout.
+  let token = tokenToRemove ?? cachedToken;
+  if (!token) {
+    try {
+      token = await getDeviceToken();
+    } catch (err) {
+      devWarn('notif-removeDeviceToken-getToken', err);
+    }
+  }
+  if (!token) {
     return { ok: true, data: undefined };
   }
 
@@ -278,12 +312,7 @@ export async function removeDeviceToken(
 
   try {
     const deviceRef = doc(db, 'users', uid, 'devices', deviceId);
-    await Promise.race([
-      deleteDoc(deviceRef),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT')), 10000),
-      ),
-    ]);
+    await withTimeout(deleteDoc(deviceRef));
     if (token === cachedToken) cachedToken = null;
     return { ok: true, data: undefined };
   } catch (err) {

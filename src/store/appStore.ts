@@ -217,7 +217,8 @@ function getSyncDelegate(get: () => AppStoreState, set: (partial: Partial<AppSto
 
 let locationEpoch = 0;
 
-let isRegisteringDevice = false;
+// uid yang registrasi perangkatnya sedang berjalan; mencegah panggilan ganda untuk uid yang sama.
+const registeringDeviceUids = new Set<string>();
 
 export const useAppStore = create<AppStoreState>()((set, get) => ({
   authStatus: 'loading',
@@ -293,16 +294,28 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setNotifPermission: (notifPermission) => set({ notifPermission }),
 
   initAuth: () => {
-    return authObserveAuth((user) => {
-      const prevUser = get().currentUser;
-      get().setCurrentUser(user);
-      if (user && !prevUser) {
-        // Pengguna masuk dari sesi tersimpan di perangkat (token diperbarui)
-        get().registerDevice().catch((err) => {
-          devWarn('initAuth-registerDevice', err);
-        });
+    // Satu-satunya titik registrasi perangkat: dipicu setiap uid pengguna berganti (null → A, A → B),
+    // lewat login, daftar, maupun sesi tersimpan. Listener auth sendiri tidak memanggil
+    // onUser setelah register, sehingga pemicunya adalah perubahan currentUser di store.
+    const registerFor = (user: User | null) => {
+      if (!user) return;
+      get().registerDevice().catch((err) => {
+        devWarn('initAuth-registerDevice', err);
+      });
+    };
+    const unsubscribeStore = useAppStore.subscribe((state, prev) => {
+      const uid = state.currentUser?.id;
+      if (uid && uid !== prev.currentUser?.id) {
+        registerFor(state.currentUser);
       }
     });
+    const unsubscribeAuth = authObserveAuth((user) => {
+      get().setCurrentUser(user);
+    });
+    return () => {
+      unsubscribeAuth();
+      unsubscribeStore();
+    };
   },
 
   retrySync: (key) => {
@@ -632,11 +645,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   registerDevice: async () => {
-    if (isRegisteringDevice) return;
     const user = get().currentUser;
-    if (!user) return;
+    if (!user || registeringDeviceUids.has(user.id)) return;
 
-    isRegisteringDevice = true;
+    registeringDeviceUids.add(user.id);
     try {
       // Minta izin notifikasi (dengan dialog penjelasan sebelum dialog sistem jika undetermined)
       const perm = await svcRequestNotifPermission(true);
@@ -644,14 +656,15 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
       if (perm === 'granted') {
         const token = await svcGetDeviceToken();
-        if (token) {
+        // Pengguna bisa logout atau berganti akun selama menunggu; jangan simpan di uid yang salah.
+        if (token && get().currentUser?.id === user.id) {
           await svcSaveDeviceToken(user.id, token);
         }
       }
     } catch (err) {
       devWarn('store-registerDevice', err);
     } finally {
-      isRegisteringDevice = false;
+      registeringDeviceUids.delete(user.id);
     }
   },
 

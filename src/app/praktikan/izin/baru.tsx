@@ -14,6 +14,7 @@ import {
   useCurrentUser,
   useHasAttended,
   useIzinByUser,
+  useLabForSession,
   useSessionById,
 } from '@/store/appStore';
 import { colors } from '@/theme/colors';
@@ -27,6 +28,7 @@ export default function PengajuanIzinBaruScreen() {
 
   const currentUser = useCurrentUser();
   const session = useSessionById(sessionId);
+  const lab = useLabForSession(sessionId);
   const alreadyAttended = useHasAttended(sessionId, currentUser?.id ?? '');
   const izinList = useIzinByUser(currentUser?.id ?? '');
   const existingIzin = izinList.find((i) => i.sessionId === sessionId);
@@ -128,7 +130,7 @@ export default function PengajuanIzinBaruScreen() {
           {errorMessage ? <Banner tone="danger" message={errorMessage} /> : null}
 
           <Card>
-            <SessionInfo session={session} />
+            <SessionInfo session={session} labName={lab?.nama} />
           </Card>
 
           <IzinForm onSubmit={handleSubmit} submitting={submitting} />
